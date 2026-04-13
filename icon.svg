@@ -37,7 +37,7 @@
 
   <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#bg)"/>
 
-  <g filter="url(#shadow)" transform="translate(0 -28)">
+  <g filter="url(#shadow)" transform="translate(0 -48)">
     <path d="M256 108C220.654 108 192 136.654 192 172V252C192 287.346 220.654 316 256 316C291.346 316 320 287.346 320 252V172C320 136.654 291.346 108 256 108Z" fill="url(#mic)"/>
     <path d="M256 136C235.013 136 218 153.013 218 174V250C218 270.987 235.013 288 256 288C276.987 288 294 270.987 294 250V174C294 153.013 276.987 136 256 136Z" fill="#A855F7" fill-opacity="0.18"/>
     <path d="M176 242C176 286.183 211.817 322 256 322C300.183 322 336 286.183 336 242" stroke="#F5F3FF" stroke-width="24" stroke-linecap="round"/>
