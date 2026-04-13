@@ -1,0 +1,1219 @@
+{
+  "id": "5d3eee0b-814c-4545-937b-cf69a884bed6",
+  "revision": 0,
+  "last_node_id": 90,
+  "last_link_id": 116,
+  "nodes": [
+    {
+      "id": 6,
+      "type": "LoadAudio",
+      "pos": [
+        280,
+        -1920
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            96
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "nastya.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 43,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        280,
+        -2180
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            83
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 57,
+      "type": "TS_CosyVoice3_Instruct2",
+      "pos": [
+        710,
+        -2180
+      ],
+      "size": [
+        540,
+        390
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 83
+        },
+        {
+          "name": "reference_audio",
+          "type": "AUDIO",
+          "link": 96
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            87
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_Instruct2"
+      },
+      "widgets_values": [
+        "Княжна Марья произвела на него приятное впечатление под Смоленском. То, что он встретил ее тогда в таких особенных условиях, и то, что именно на нее одно время его мать указывала ему как на богатую партию, сделали то, что он обратил на нее особенное внимание.",
+        "Speak in a calm, soft, soothing tone with gentle emphasis, stable rhythm, smooth phrasing, and restrained emotional movement.",
+        1,
+        42,
+        "fixed",
+        true,
+        "Спокойный мягкий"
+      ]
+    },
+    {
+      "id": 59,
+      "type": "SaveAudioMP3",
+      "pos": [
+        1290,
+        -2180
+      ],
+      "size": [
+        420,
+        140
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 87
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "SaveAudioMP3"
+      },
+      "widgets_values": [
+        "audio/ComfyUI",
+        "V0"
+      ]
+    },
+    {
+      "id": 62,
+      "type": "TS_CosyVoice3_VoiceConversion",
+      "pos": [
+        740,
+        -1570
+      ],
+      "size": [
+        300,
+        170
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 98
+        },
+        {
+          "name": "source_audio",
+          "type": "AUDIO",
+          "link": 99
+        },
+        {
+          "name": "target_audio",
+          "type": "AUDIO",
+          "link": 100
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            92
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_VoiceConversion"
+      },
+      "widgets_values": [
+        1,
+        5,
+        2036541576,
+        "randomize"
+      ]
+    },
+    {
+      "id": 63,
+      "type": "LoadAudio",
+      "pos": [
+        280,
+        -1140
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            100
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "olga.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 64,
+      "type": "SaveAudioMP3",
+      "pos": [
+        1110,
+        -1570
+      ],
+      "size": [
+        590,
+        170
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 92
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "SaveAudioMP3"
+      },
+      "widgets_values": [
+        "audio/ComfyUI",
+        "V0"
+      ]
+    },
+    {
+      "id": 67,
+      "type": "LoadAudio",
+      "pos": [
+        280,
+        -1330
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            99
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "nastya.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 68,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        280,
+        -1570
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            98
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 69,
+      "type": "LoadAudio",
+      "pos": [
+        270,
+        -550
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            107
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "nastya.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 70,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        270,
+        -790
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            106
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 74,
+      "type": "TS_CosyVoice3_SaveSpeaker",
+      "pos": [
+        750,
+        -790
+      ],
+      "size": [
+        400,
+        200
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 106
+        },
+        {
+          "name": "reference_audio",
+          "type": "AUDIO",
+          "link": 107
+        }
+      ],
+      "outputs": [
+        {
+          "name": "saved_path",
+          "type": "STRING",
+          "links": [
+            105
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_SaveSpeaker"
+      },
+      "widgets_values": [
+        "",
+        "Nastya"
+      ]
+    },
+    {
+      "id": 75,
+      "type": "PreviewAny",
+      "pos": [
+        1220,
+        -790
+      ],
+      "size": [
+        460,
+        200
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "*",
+          "link": 105
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "PreviewAny"
+      },
+      "widgets_values": [
+        null,
+        null,
+        false
+      ]
+    },
+    {
+      "id": 76,
+      "type": "TS_CosyVoice3_SpeakerInstruct2",
+      "pos": [
+        720,
+        -130
+      ],
+      "size": [
+        450,
+        410
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 108
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            109
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_SpeakerInstruct2"
+      },
+      "widgets_values": [
+        "Княжна Марья произвела на него приятное впечатление под Смоленском. То, что он встретил ее тогда в таких особенных условиях, и то, что именно на нее одно время его мать указывала ему как на богатую партию, сделали то, что он обратил на нее особенное внимание.",
+        "Speak in a calm, soft, soothing tone with gentle emphasis, stable rhythm, smooth phrasing, and restrained emotional movement.",
+        "my_speaker",
+        1,
+        42,
+        "randomize",
+        true,
+        "Ваша инструкция"
+      ]
+    },
+    {
+      "id": 77,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        270,
+        -130
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            108
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 78,
+      "type": "SaveAudioMP3",
+      "pos": [
+        1270,
+        -130
+      ],
+      "size": [
+        410,
+        180
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 109
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "SaveAudioMP3"
+      },
+      "widgets_values": [
+        "audio/ComfyUI",
+        "V0"
+      ]
+    },
+    {
+      "id": 79,
+      "type": "TS_CosyVoice3_Dialog",
+      "pos": [
+        780,
+        520
+      ],
+      "size": [
+        400,
+        260
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 110
+        },
+        {
+          "name": "speaker_A_Audio",
+          "type": "AUDIO",
+          "link": 112
+        },
+        {
+          "name": "speaker_B_Audio",
+          "type": "AUDIO",
+          "link": 113
+        },
+        {
+          "name": "speaker_C_Audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "speaker_D_Audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "dialog_audio",
+          "type": "AUDIO",
+          "links": [
+            111
+          ]
+        },
+        {
+          "name": "speaker_a_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "speaker_b_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "speaker_c_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "speaker_d_audio",
+          "type": "AUDIO",
+          "links": null
+        },
+        {
+          "name": "message",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_Dialog"
+      },
+      "widgets_values": [
+        "SPEAKER A: Привет, как дела?\nSPEAKER B: Привет! Отлично!",
+        1,
+        42,
+        "randomize"
+      ]
+    },
+    {
+      "id": 80,
+      "type": "LoadAudio",
+      "pos": [
+        260,
+        760
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            112
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "nastya.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 81,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        260,
+        510
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            110
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 82,
+      "type": "SaveAudioMP3",
+      "pos": [
+        1280,
+        520
+      ],
+      "size": [
+        410,
+        180
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 111
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "SaveAudioMP3"
+      },
+      "widgets_values": [
+        "audio/ComfyUI",
+        "V0"
+      ]
+    },
+    {
+      "id": 83,
+      "type": "LoadAudio",
+      "pos": [
+        260,
+        970
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            113
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "olga.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 84,
+      "type": "TS_CosyVoice3_CrossLingual",
+      "pos": [
+        760.2699968247586,
+        1344.2987713830166
+      ],
+      "size": [
+        400,
+        228
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "link": 114
+        },
+        {
+          "name": "reference_audio",
+          "type": "AUDIO",
+          "link": 115
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            116
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_CrossLingual"
+      },
+      "widgets_values": [
+        "Привет! Как дела?",
+        1,
+        "auto",
+        42,
+        "randomize",
+        true
+      ]
+    },
+    {
+      "id": 85,
+      "type": "TS_CosyVoice3_ModelLoader",
+      "pos": [
+        280,
+        1340
+      ],
+      "size": [
+        400,
+        190
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "COSYVOICE_MODEL",
+          "links": [
+            114
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "TS_CosyVoice3_ModelLoader"
+      },
+      "widgets_values": [
+        "Fun-CosyVoice3-0.5B",
+        "HuggingFace",
+        "auto",
+        true
+      ]
+    },
+    {
+      "id": 86,
+      "type": "LoadAudio",
+      "pos": [
+        280,
+        1590
+      ],
+      "size": [
+        400,
+        140
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            115
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "LoadAudio"
+      },
+      "widgets_values": [
+        "nastya.mp3",
+        null,
+        null
+      ]
+    },
+    {
+      "id": 88,
+      "type": "SaveAudioMP3",
+      "pos": [
+        1250,
+        1350
+      ],
+      "size": [
+        410,
+        180
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 116
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.18.1",
+        "Node name for S&R": "SaveAudioMP3"
+      },
+      "widgets_values": [
+        "audio/ComfyUI",
+        "V0"
+      ]
+    }
+  ],
+  "links": [
+    [
+      83,
+      43,
+      0,
+      57,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      87,
+      57,
+      0,
+      59,
+      0,
+      "AUDIO"
+    ],
+    [
+      92,
+      62,
+      0,
+      64,
+      0,
+      "AUDIO"
+    ],
+    [
+      96,
+      6,
+      0,
+      57,
+      1,
+      "AUDIO"
+    ],
+    [
+      98,
+      68,
+      0,
+      62,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      99,
+      67,
+      0,
+      62,
+      1,
+      "AUDIO"
+    ],
+    [
+      100,
+      63,
+      0,
+      62,
+      2,
+      "AUDIO"
+    ],
+    [
+      105,
+      74,
+      0,
+      75,
+      0,
+      "STRING"
+    ],
+    [
+      106,
+      70,
+      0,
+      74,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      107,
+      69,
+      0,
+      74,
+      1,
+      "AUDIO"
+    ],
+    [
+      108,
+      77,
+      0,
+      76,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      109,
+      76,
+      0,
+      78,
+      0,
+      "AUDIO"
+    ],
+    [
+      110,
+      81,
+      0,
+      79,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      111,
+      79,
+      0,
+      82,
+      0,
+      "AUDIO"
+    ],
+    [
+      112,
+      80,
+      0,
+      79,
+      1,
+      "AUDIO"
+    ],
+    [
+      113,
+      83,
+      0,
+      79,
+      2,
+      "AUDIO"
+    ],
+    [
+      114,
+      85,
+      0,
+      84,
+      0,
+      "COSYVOICE_MODEL"
+    ],
+    [
+      115,
+      86,
+      0,
+      84,
+      1,
+      "AUDIO"
+    ],
+    [
+      116,
+      84,
+      0,
+      88,
+      0,
+      "AUDIO"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "Text to Voice",
+      "bounding": [
+        270,
+        -2250,
+        1450,
+        483.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Voice to Voice",
+      "bounding": [
+        270,
+        -1640,
+        1440,
+        653.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Save Speaker",
+      "bounding": [
+        260,
+        -860,
+        1430,
+        463.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "Speaker Text To Voice",
+      "bounding": [
+        260,
+        -200,
+        1430,
+        493.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "Dialog Text To Voice",
+      "bounding": [
+        250,
+        440,
+        1450,
+        683.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "Cross Language Reference Text To Voice",
+      "bounding": [
+        270,
+        1270,
+        1400,
+        473.6
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.14864362802414366,
+      "offset": [
+        4590.356005963958,
+        3256.4198802243445
+      ]
+    },
+    "frontendVersion": "1.42.8",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
