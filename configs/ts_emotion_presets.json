@@ -1,0 +1,52 @@
+{
+  "presets": [
+    {
+      "name": "Теплый дружелюбный",
+      "instruction": "Speak in a warm, friendly, natural tone with smooth intonation, relaxed pacing, clear articulation, and an approachable emotional delivery."
+    },
+    {
+      "name": "Спокойный мягкий",
+      "instruction": "Speak in a calm, soft, soothing tone with gentle emphasis, stable rhythm, smooth phrasing, and restrained emotional movement."
+    },
+    {
+      "name": "Энергичный выразительный",
+      "instruction": "Speak with energetic delivery, lively rhythm, expressive emphasis, dynamic intonation, and a confident forward-moving pace."
+    },
+    {
+      "name": "Кинематографичный драматичный",
+      "instruction": "Speak with cinematic dramatic delivery, deliberate pacing, meaningful pauses, strong emphasis on key words, and emotionally weighty phrasing."
+    },
+    {
+      "name": "Интимный тихий",
+      "instruction": "Speak in a quiet intimate manner with soft articulation, close and personal delivery, gentle breathiness, and slow controlled pacing."
+    },
+    {
+      "name": "Уверенный авторитетный",
+      "instruction": "Speak with an authoritative confident tone, firm articulation, controlled rhythm, precise emphasis, and composed emotional restraint."
+    },
+    {
+      "name": "Игривый легкий",
+      "instruction": "Speak in a playful lighthearted style with buoyant rhythm, lively phrasing, varied intonation, and a cheerful emotional color."
+    },
+    {
+      "name": "Серьезный сдержанный",
+      "instruction": "Speak in a serious composed manner with restrained expression, even pacing, minimal ornamentation, and steady neutral authority."
+    },
+    {
+      "name": "Усталый мягкий",
+      "instruction": "Speak with a tired gentle delivery, slightly uneven rhythm, softened articulation, subtle emotional fatigue, and natural falling phrase endings."
+    },
+    {
+      "name": "Эмоциональный уязвимый",
+      "instruction": "Speak with emotional vulnerability, soft phrasing, delicate emphasis, slight hesitations, and a tender expressive tone."
+    },
+    {
+      "name": "Резкий интенсивный",
+      "instruction": "Speak with intense emotional pressure, sharp articulation, fast pacing, strong emphasis, and an urgent forceful delivery."
+    },
+    {
+      "name": "Нейтральный профессиональный",
+      "instruction": "Speak in a neutral professional style with clean pronunciation, balanced rhythm, moderate pacing, minimal emotional coloring, and clear informative delivery."
+    }
+  ]
+}

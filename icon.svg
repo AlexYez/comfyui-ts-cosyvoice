@@ -1,0 +1,52 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C084FC"/>
+      <stop offset="0.5" stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#4C1D95"/>
+    </linearGradient>
+    <linearGradient id="mic" x1="196" y1="124" x2="316" y2="388" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FAF5FF"/>
+      <stop offset="1" stop-color="#DDD6FE"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="182" y1="108" x2="298" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="76" y="76" width="360" height="360" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="16"/>
+      <feGaussianBlur stdDeviation="20"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.211765 0 0 0 0 0.0705882 0 0 0 0 0.45098 0 0 0 0.35 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <filter id="textShadow" x="88" y="348" width="336" height="92" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="8"/>
+      <feGaussianBlur stdDeviation="10"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.211765 0 0 0 0 0.0705882 0 0 0 0 0.45098 0 0 0 0.35 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_2"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_2" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#bg)"/>
+
+  <g filter="url(#shadow)" transform="translate(0 -28)">
+    <path d="M256 108C220.654 108 192 136.654 192 172V252C192 287.346 220.654 316 256 316C291.346 316 320 287.346 320 252V172C320 136.654 291.346 108 256 108Z" fill="url(#mic)"/>
+    <path d="M256 136C235.013 136 218 153.013 218 174V250C218 270.987 235.013 288 256 288C276.987 288 294 270.987 294 250V174C294 153.013 276.987 136 256 136Z" fill="#A855F7" fill-opacity="0.18"/>
+    <path d="M176 242C176 286.183 211.817 322 256 322C300.183 322 336 286.183 336 242" stroke="#F5F3FF" stroke-width="24" stroke-linecap="round"/>
+    <path d="M256 322V382" stroke="#F5F3FF" stroke-width="24" stroke-linecap="round"/>
+    <path d="M210 404H302" stroke="#F5F3FF" stroke-width="24" stroke-linecap="round"/>
+    <path d="M224 132C205.222 142.872 192 163.188 192 186V236C192 246.289 194.694 255.949 199.416 264.314C212.317 248.449 230.457 238.649 251.14 238.649H286.218C298.44 238.649 309.774 235.226 319.403 229.296C319.795 226.903 320 224.448 320 221.944V172C320 136.654 291.346 108 256 108C244.54 108 233.784 111.013 224 116.284V132Z" fill="url(#shine)"/>
+  </g>
+
+  <g filter="url(#textShadow)">
+    <text x="256" y="418" text-anchor="middle" fill="#F5F3FF" font-family="Verdana, DejaVu Sans, sans-serif" font-size="44" font-weight="700" letter-spacing="1.5">Cosy Voice</text>
+  </g>
+</svg>
