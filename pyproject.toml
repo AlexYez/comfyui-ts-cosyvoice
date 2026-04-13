@@ -39,4 +39,4 @@ Repository = "https://github.com/AlexYez/comfyui-ts-cosyvoice"
 [tool.comfy]
 PublisherId = "timesaver"
 DisplayName = "ComfyUI TS CosyVoice RU Edition"
-Icon = ""
+Icon = "https://raw.githubusercontent.com/AlexYez/comfyui-ts-cosyvoice/refs/heads/main/icon.svg"
