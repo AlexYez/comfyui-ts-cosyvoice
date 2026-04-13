@@ -35,7 +35,6 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 - `TS CosyVoice Model Loader` - скачивает и загружает модель CosyVoice 3.
 - `TS CosyVoice Text to Voice` - синтезирует речь по тексту с опорой на референсный голос и эмоцию.
 - `TS CosyVoice Save Speaker` - сохраняет голос как готовый пресет для повторного использования.
-- `TS CosyVoice Speaker To Audio` - генерирует речь из текста с уже сохраненным пресетом голоса.
 - `TS CosyVoice Speaker Text To Voice` - генерирует речь с сохраненным голосом и дополнительной эмоцией/инструкцией.
 - `TS CosyVoice Cross-Language` - озвучивает текст на другом языке, сохраняя тембр референса.
 - `TS CosyVoice Voice To Voice` - конвертирует одно аудио в другой тембр.
@@ -113,27 +112,7 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 
 - задавайте понятные имена вроде `narrator_female_soft` или `hero_male_dark`.
 
-### 4. TS CosyVoice Speaker To Audio
-
-Это быстрый синтез по уже сохраненному пресету голоса.
-
-Что делает:
-
-- берет `speaker_preset`;
-- берет новый `text`;
-- генерирует аудио без необходимости снова давать референсный файл.
-
-Подходит для:
-
-- серийной генерации фраз одним голосом;
-- озвучки длинных проектов с постоянным спикером;
-- сценариев, где референс уже один раз сохранен.
-
-Когда выбирать эту ноду:
-
-- если вам не нужны дополнительные эмоции и достаточно просто говорить голосом сохраненного персонажа.
-
-### 5. TS CosyVoice Speaker Text To Voice
+### 4. TS CosyVoice Speaker Text To Voice
 
 Похожа на предыдущую ноду, но добавляет управление подачей через эмоции и инструкции.
 
@@ -157,7 +136,7 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 
 - если нужен стабильный тембр персонажа и при этом гибкая подача, это одна из самых удобных нод в паке.
 
-### 6. TS CosyVoice Cross-Language
+### 5. TS CosyVoice Cross-Language
 
 Нода для кросс-языковой озвучки.
 
@@ -181,7 +160,7 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 
 - если не уверены в языке, оставьте `target_language = auto`.
 
-### 7. TS CosyVoice Voice To Voice
+### 6. TS CosyVoice Voice To Voice
 
 Нода для конвертации одного аудио в другой тембр.
 
@@ -209,7 +188,7 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 - длинное `source_audio` обрабатывается по чанкам;
 - разрез старается не ломать речь посреди слова.
 
-### 8. TS CosyVoice Dialog
+### 7. TS CosyVoice Dialog
 
 Нода собирает многоголосый диалог в одном месте.
 
@@ -247,7 +226,6 @@ TS CosyVoice for ComfyUI - это набор удобных нод для син
 ### Какой workflow использовать
 
 - Нужен быстрый TTS по референсу: `Model Loader -> Text to Voice`
-- Нужен постоянный персонаж: `Save Speaker -> Speaker To Audio`
 - Нужна эмоция поверх сохраненного голоса: `Save Speaker -> Speaker Text To Voice`
 - Нужна смена языка: `Model Loader -> Cross-Language`
 - Нужна конвертация записанного аудио: `Model Loader -> Voice To Voice`
@@ -299,7 +277,6 @@ The pack is designed to feel comfortable in real workflows:
 - `TS CosyVoice Model Loader`
 - `TS CosyVoice Text to Voice`
 - `TS CosyVoice Save Speaker`
-- `TS CosyVoice Speaker To Audio`
 - `TS CosyVoice Speaker Text To Voice`
 - `TS CosyVoice Cross-Language`
 - `TS CosyVoice Voice To Voice`
@@ -371,23 +348,7 @@ Screenshot:
 
 ![TS CosyVoice Save Speaker](./img/save-speaker.png)
 
-### 4. TS CosyVoice Speaker To Audio
-
-This is the simplest way to synthesize speech from a saved speaker preset.
-
-It:
-
-- loads `speaker_preset`;
-- takes fresh `text`;
-- generates audio without re-uploading a reference file.
-
-Best for:
-
-- production workflows with stable recurring voices;
-- batch generation with the same speaker;
-- lightweight character reuse.
-
-### 5. TS CosyVoice Speaker Text To Voice
+### 4. TS CosyVoice Speaker Text To Voice
 
 This node combines a saved speaker preset with emotional control.
 
@@ -407,7 +368,7 @@ Screenshot:
 
 ![TS CosyVoice Speaker Text To Voice](./img/speaker-text-to-voice.png)
 
-### 6. TS CosyVoice Cross-Language
+### 5. TS CosyVoice Cross-Language
 
 This node is for cross-language voice generation.
 
@@ -427,7 +388,7 @@ Screenshot:
 
 ![TS CosyVoice Cross-Language](./img/cross-language.png)
 
-### 7. TS CosyVoice Voice To Voice
+### 6. TS CosyVoice Voice To Voice
 
 This node converts one spoken recording into another timbre.
 
@@ -455,7 +416,7 @@ Notes:
 - long `source_audio` is processed in chunks;
 - chunking tries to avoid cutting speech in awkward places.
 
-### 8. TS CosyVoice Dialog
+### 7. TS CosyVoice Dialog
 
 This node builds multi-speaker dialogue from a script.
 
@@ -489,7 +450,6 @@ Screenshot:
 ### Recommended workflow patterns
 
 - Fast reference-based TTS: `Model Loader -> Text to Voice`
-- Reusable character voice: `Save Speaker -> Speaker To Audio`
 - Reusable character with emotion: `Save Speaker -> Speaker Text To Voice`
 - Cross-language speech: `Model Loader -> Cross-Language`
 - Recorded voice conversion: `Model Loader -> Voice To Voice`

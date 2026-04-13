@@ -20,7 +20,6 @@ try:
     from .nodes.ts_cosyvoice_dialog_node import TS_CosyVoice3_Dialog
     from .nodes.ts_cosyvoice_text_to_voice_node import TS_CosyVoice3_Instruct2
     from .nodes.ts_cosyvoice_save_speaker_node import TS_CosyVoice3_SaveSpeaker
-    from .nodes.ts_cosyvoice_speaker_to_audio_node import TS_CosyVoice3_SpeakerClone
     from .nodes.ts_cosyvoice_speaker_text_to_voice_node import TS_CosyVoice3_SpeakerInstruct2
 except ImportError:
     from nodes.ts_cosyvoice_model_loader_node import TS_CosyVoice3_ModelLoader
@@ -29,7 +28,6 @@ except ImportError:
     from nodes.ts_cosyvoice_dialog_node import TS_CosyVoice3_Dialog
     from nodes.ts_cosyvoice_text_to_voice_node import TS_CosyVoice3_Instruct2
     from nodes.ts_cosyvoice_save_speaker_node import TS_CosyVoice3_SaveSpeaker
-    from nodes.ts_cosyvoice_speaker_to_audio_node import TS_CosyVoice3_SpeakerClone
     from nodes.ts_cosyvoice_speaker_text_to_voice_node import TS_CosyVoice3_SpeakerInstruct2
 
 NODE_CLASS_MAPPINGS = {
@@ -39,7 +37,6 @@ NODE_CLASS_MAPPINGS = {
     "TS_CosyVoice3_Dialog": TS_CosyVoice3_Dialog,
     "TS_CosyVoice3_Instruct2": TS_CosyVoice3_Instruct2,
     "TS_CosyVoice3_SaveSpeaker": TS_CosyVoice3_SaveSpeaker,
-    "TS_CosyVoice3_SpeakerClone": TS_CosyVoice3_SpeakerClone,
     "TS_CosyVoice3_SpeakerInstruct2": TS_CosyVoice3_SpeakerInstruct2,
 }
 
@@ -50,7 +47,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "TS_CosyVoice3_Dialog": "TS CosyVoice Dialog",
     "TS_CosyVoice3_Instruct2": "TS CosyVoice Text to Voice",
     "TS_CosyVoice3_SaveSpeaker": "TS CosyVoice Save Speaker",
-    "TS_CosyVoice3_SpeakerClone": "TS CosyVoice Speaker To Audio",
     "TS_CosyVoice3_SpeakerInstruct2": "TS CosyVoice Speaker Text To Voice",
 }
 
