@@ -103,6 +103,39 @@ pip install -r requirements.txt
 | 🔊 **Voice To Voice** | `Synthesis` | Источник + целевой тембр → новый микс | Конвертация длинных записей |
 | 🗣️ **Dialog** | `Synthesis` | Многоголосый диалог из скрипта | Сцены, визуальные новеллы |
 
+### 📸 Как ноды выглядят в ComfyUI
+
+<table>
+<tr>
+<td width="33%" align="center">
+<img src="./img/text-to-voice.png" alt="Text to Voice"><br>
+<sub><b>🎤 Text to Voice</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/save-speaker.png" alt="Save Speaker"><br>
+<sub><b>💾 Save Speaker</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/speaker-text-to-voice.png" alt="Speaker Text To Voice"><br>
+<sub><b>🎭 Speaker Text To Voice</b></sub>
+</td>
+</tr>
+<tr>
+<td width="33%" align="center">
+<img src="./img/cross-language.png" alt="Cross-Language"><br>
+<sub><b>🌍 Cross-Language</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/voice-to-voice.png" alt="Voice To Voice"><br>
+<sub><b>🔊 Voice To Voice</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/dialog-voice.png" alt="Dialog"><br>
+<sub><b>🗣️ Dialog</b></sub>
+</td>
+</tr>
+</table>
+
 <details>
 <summary><b>🚀 1. TS CosyVoice Model Loader</b> — главная входная точка</summary>
 
@@ -470,6 +503,39 @@ pip install -r requirements.txt
 | 🌍 **Cross-Language** | `Synthesis` | Text in another language, your reference's timbre | Localization |
 | 🔊 **Voice To Voice** | `Synthesis` | Source + target timbre → new mix | Converting long recordings |
 | 🗣️ **Dialog** | `Synthesis` | Multi-speaker scene from a script | Visual novels, scenes |
+
+### 📸 What the nodes look like in ComfyUI
+
+<table>
+<tr>
+<td width="33%" align="center">
+<img src="./img/text-to-voice.png" alt="Text to Voice"><br>
+<sub><b>🎤 Text to Voice</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/save-speaker.png" alt="Save Speaker"><br>
+<sub><b>💾 Save Speaker</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/speaker-text-to-voice.png" alt="Speaker Text To Voice"><br>
+<sub><b>🎭 Speaker Text To Voice</b></sub>
+</td>
+</tr>
+<tr>
+<td width="33%" align="center">
+<img src="./img/cross-language.png" alt="Cross-Language"><br>
+<sub><b>🌍 Cross-Language</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/voice-to-voice.png" alt="Voice To Voice"><br>
+<sub><b>🔊 Voice To Voice</b></sub>
+</td>
+<td width="33%" align="center">
+<img src="./img/dialog-voice.png" alt="Dialog"><br>
+<sub><b>🗣️ Dialog</b></sub>
+</td>
+</tr>
+</table>
 
 <details>
 <summary><b>🚀 1. TS CosyVoice Model Loader</b> — entry point</summary>
