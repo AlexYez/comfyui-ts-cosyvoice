@@ -8,7 +8,7 @@
 **Соберите многоголосый диалог одним нодом — прямо в ComfyUI.**
 
 [![Version](https://img.shields.io/badge/version-0.7.0-blue?style=flat-square)](./CHANGELOG.md)
-[![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./docs/adr/0001-migrate-v1-to-v3.md)
+[![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](./pyproject.toml)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
 [![Tests](https://img.shields.io/badge/tests-29%20passing-brightgreen?style=flat-square)](./tests)
@@ -361,7 +361,7 @@ ComfyUI/
 > **Полная миграция на ComfyUI V3 schema** (`IO.ComfyNode` + `define_schema` + `IO.NodeOutput`, привязано к `comfy_api.v0_0_2`).
 > Все `node_id`, имена входов/выходов и их порядок **сохранены** — ваши workflow JSON-ы продолжают работать без изменений.
 
-**Подробности:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md).
+**Подробности:** [CHANGELOG.md](./CHANGELOG.md).
 
 **Минимальная версия ComfyUI:** `>=0.3.40`.
 
@@ -729,7 +729,7 @@ ComfyUI/
 > **Full migration to ComfyUI V3 schema** (`IO.ComfyNode` + `define_schema` + `IO.NodeOutput`, pinned to `comfy_api.v0_0_2`).
 > All `node_id` strings, input/output names and ordering are **preserved** — your existing workflow JSONs keep working without modification.
 
-**Details:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md).
+**Details:** [CHANGELOG.md](./CHANGELOG.md).
 
 **Minimum ComfyUI:** `>=0.3.40`.
 

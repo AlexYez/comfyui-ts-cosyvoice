@@ -27,8 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nodes/_v3_types.py` and imported by every consumer.
 
 ### Added
-- `docs/adr/0001-migrate-v1-to-v3.md` — architecture decision record for the
-  schema migration.
 - `tests/contracts/v1_baseline.json` — frozen V1 contract snapshot used as the
   source of truth for migration verification.
 - `tests/test_node_contracts.py` — pytest suite asserting that every node's
