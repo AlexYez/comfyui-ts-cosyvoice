@@ -1,12 +1,19 @@
 """
-TS CosyVoice3 - Advanced Text-to-Speech for ComfyUI
-Zero-shot voice cloning, cross-lingual synthesis, and instruction-based control
+TS CosyVoice3 - Advanced Text-to-Speech for ComfyUI (V3 schema only).
+Zero-shot voice cloning, cross-lingual synthesis, and instruction-based control.
+
+Registration is V3-only: every node inherits from IO.ComfyNode and is exposed
+through the ComfyExtension returned by comfy_entrypoint(). The legacy
+NODE_CLASS_MAPPINGS / NODE_DISPLAY_NAME_MAPPINGS dicts were dropped in the
+0.7 release after the V1 -> V3 migration completed.
 """
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+
+from comfy_api.v0_0_2 import ComfyExtension
 
 try:
     from .utils.ts_logging import get_logger
@@ -30,26 +37,27 @@ except ImportError:
     from nodes.ts_cosyvoice_save_speaker_node import TS_CosyVoice3_SaveSpeaker
     from nodes.ts_cosyvoice_speaker_text_to_voice_node import TS_CosyVoice3_SpeakerInstruct2
 
-NODE_CLASS_MAPPINGS = {
-    "TS_CosyVoice3_ModelLoader": TS_CosyVoice3_ModelLoader,
-    "TS_CosyVoice3_CrossLingual": TS_CosyVoice3_CrossLingual,
-    "TS_CosyVoice3_VoiceConversion": TS_CosyVoice3_VoiceConversion,
-    "TS_CosyVoice3_Dialog": TS_CosyVoice3_Dialog,
-    "TS_CosyVoice3_Instruct2": TS_CosyVoice3_Instruct2,
-    "TS_CosyVoice3_SaveSpeaker": TS_CosyVoice3_SaveSpeaker,
-    "TS_CosyVoice3_SpeakerInstruct2": TS_CosyVoice3_SpeakerInstruct2,
-}
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "TS_CosyVoice3_ModelLoader": "TS CosyVoice Model Loader",
-    "TS_CosyVoice3_CrossLingual": "TS CosyVoice Cross-Language",
-    "TS_CosyVoice3_VoiceConversion": "TS CosyVoice Voice To Voice",
-    "TS_CosyVoice3_Dialog": "TS CosyVoice Dialog",
-    "TS_CosyVoice3_Instruct2": "TS CosyVoice Text to Voice",
-    "TS_CosyVoice3_SaveSpeaker": "TS CosyVoice Save Speaker",
-    "TS_CosyVoice3_SpeakerInstruct2": "TS CosyVoice Speaker Text To Voice",
-}
+_V3_NODES: list[type] = [
+    TS_CosyVoice3_ModelLoader,
+    TS_CosyVoice3_Instruct2,
+    TS_CosyVoice3_SpeakerInstruct2,
+    TS_CosyVoice3_CrossLingual,
+    TS_CosyVoice3_VoiceConversion,
+    TS_CosyVoice3_SaveSpeaker,
+    TS_CosyVoice3_Dialog,
+]
 
-get_logger("TS CosyVoice").info("TS CosyVoice3 Custom Nodes Loaded - Version 1.2.1")
 
-__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+class _PackExtension(ComfyExtension):
+    async def get_node_list(self) -> list[type]:
+        return list(_V3_NODES)
+
+
+async def comfy_entrypoint() -> ComfyExtension:
+    return _PackExtension()
+
+
+get_logger("TS CosyVoice").info("TS CosyVoice3 Custom Nodes Loaded - Version 0.7.0")
+
+__all__ = ["comfy_entrypoint"]

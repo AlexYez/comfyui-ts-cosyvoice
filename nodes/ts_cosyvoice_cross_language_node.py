@@ -1,10 +1,23 @@
-"""TS CosyVoice cross-language node."""
+"""
+TS CosyVoice cross-language node (V3 schema).
+
+Migrated from V1 to V3 on 2026-05-07.
+Public contract preserved:
+- node_id: TS_CosyVoice3_CrossLingual
+- inputs (required): model, text, reference_audio, speed
+- inputs (optional): target_language, seed, text_normalize
+- outputs: (AUDIO,) named "audio"
+"""
+
+from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import torch
+
+from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -23,6 +36,7 @@ try:
     from ..utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import (
         REFERENCE_AUDIO_MAX_SECONDS,
@@ -35,76 +49,83 @@ except (ImportError, ValueError):
     from utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
 
 
 LOGGER = get_logger("TS CosyVoice Cross Language")
 
+_TARGET_LANGUAGES = ["auto", "zh", "en", "ja", "ko", "de", "es", "fr", "it", "ru"]
 
-class TS_CosyVoice3_CrossLingual:
+
+class TS_CosyVoice3_CrossLingual(IO.ComfyNode):
     """Generate speech in another language while preserving the reference timbre."""
 
-    RETURN_TYPES = ("AUDIO",)
-    RETURN_NAMES = ("audio",)
-    FUNCTION = "cross_lingual_synthesis"
-    CATEGORY = "TS CosyVoice3/Synthesis"
+    @classmethod
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="TS_CosyVoice3_CrossLingual",
+            display_name="TS CosyVoice Cross-Language",
+            category="TS CosyVoice3/Synthesis",
+            description="Cross-language speech synthesis: keep the reference timbre, switch the language.",
+            inputs=[
+                CosyVoiceModel.Input(
+                    "model",
+                    tooltip="Загруженная модель CosyVoice из ноды загрузчика.",
+                ),
+                IO.String.Input(
+                    "text",
+                    default="Hello, this is cross-lingual speech synthesis.",
+                    multiline=True,
+                    tooltip="Текст, который нужно озвучить на целевом языке.",
+                ),
+                IO.Audio.Input(
+                    "reference_audio",
+                    tooltip="Референсный голос; аудио будет обрезано "
+                            "до 30 секунд и приведено к mono 24 kHz.",
+                ),
+                IO.Float.Input(
+                    "speed",
+                    default=1.0,
+                    min=0.5,
+                    max=2.0,
+                    step=0.05,
+                    display_mode=IO.NumberDisplay.slider,
+                    tooltip="Множитель скорости речи на выходе.",
+                ),
+                IO.Combo.Input(
+                    "target_language",
+                    options=_TARGET_LANGUAGES,
+                    default="auto",
+                    optional=True,
+                    tooltip="Целевой язык текста; auto пытается определить язык автоматически.",
+                ),
+                IO.Int.Input(
+                    "seed",
+                    default=42,
+                    min=-1,
+                    max=2147483647,
+                    optional=True,
+                    tooltip="Зерно случайности; значение -1 использует случайный seed.",
+                ),
+                IO.Boolean.Input(
+                    "text_normalize",
+                    default=True,
+                    optional=True,
+                    tooltip="Включает нормализацию текста; отключайте для фонем CMU и специальных тегов.",
+                ),
+            ],
+            outputs=[
+                IO.Audio.Output(display_name="audio"),
+            ],
+            search_aliases=[],
+            is_output_node=False,
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("COSYVOICE_MODEL", {
-                    "description": "CosyVoice model from ModelLoader",
-                    "tooltip": "Загруженная модель CosyVoice из ноды загрузчика.",
-                }),
-                "text": ("STRING", {
-                    "default": "Hello, this is cross-lingual speech synthesis.",
-                    "multiline": True,
-                    "description": "Text to synthesize in target language",
-                    "tooltip": "Текст, который нужно озвучить на целевом языке.",
-                }),
-                "reference_audio": ("AUDIO", {
-                    "description": "Reference voice (can be in any language)",
-                    "tooltip": "Референсный голос; аудио будет обрезано "
-                               "до 30 секунд и приведено к mono 24 kHz.",
-                }),
-                "speed": ("FLOAT", {
-                    "default": 1.0,
-                    "min": 0.5,
-                    "max": 2.0,
-                    "step": 0.05,
-                    "display": "slider",
-                    "description": "Speech speed multiplier",
-                    "tooltip": "Множитель скорости речи на выходе.",
-                }),
-            },
-            "optional": {
-                "target_language": (["auto", "zh", "en", "ja", "ko", "de", "es", "fr", "it", "ru"], {
-                    "default": "auto",
-                    "description": "Target language (auto-detect from text)",
-                    "tooltip": "Целевой язык текста; auto пытается "
-                               "определить язык автоматически.",
-                }),
-                "seed": ("INT", {
-                    "default": 42,
-                    "min": -1,
-                    "max": 2147483647,
-                    "description": "Random seed (-1 for random)",
-                    "tooltip": "Зерно случайности; значение -1 "
-                               "использует случайный seed.",
-                }),
-                "text_normalize": ("BOOLEAN", {
-                    "default": True,
-                    "description": "Enable text normalization. Disable for CMU phonemes or special tags like <slow>",
-                    "tooltip": "Включает нормализацию текста; "
-                               "отключайте для фонем CMU и специальных тегов.",
-                }),
-            },
-        }
-
-    def cross_lingual_synthesis(
-        self,
+    def execute(
+        cls,
         model: Dict[str, Any],
         text: str,
         reference_audio: Dict[str, Any],
@@ -112,7 +133,7 @@ class TS_CosyVoice3_CrossLingual:
         target_language: str = "auto",
         seed: int = 42,
         text_normalize: bool = True,
-    ) -> Tuple[Dict[str, Any]]:
+    ) -> IO.NodeOutput:
         """Generate cross-language speech from text and a voice reference."""
         log_banner(
             LOGGER,
@@ -195,9 +216,9 @@ class TS_CosyVoice3_CrossLingual:
                 Duration=f"{duration:.2f} seconds",
                 SampleRate=f"{sample_rate} Hz",
             )
-            return (audio,)
+            return IO.NodeOutput(audio)
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 CrossLingual] ERROR", exc)
-            return (build_empty_audio(),)
+            return IO.NodeOutput(build_empty_audio())
         finally:
             cleanup_temp_file(temp_file)

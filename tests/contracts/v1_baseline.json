@@ -1,0 +1,175 @@
+{
+  "_comment": "V1 contract snapshot taken before V3 migration. Source of truth for contract preservation. Do not edit by hand after migration.",
+  "_generated_on": "2026-05-07",
+  "_pack": "comfyui-ts-cosyvoice",
+  "_pack_version": "0.6",
+  "nodes": [
+    {
+      "node_id": "TS_CosyVoice3_ModelLoader",
+      "class_name": "TS_CosyVoice3_ModelLoader",
+      "display_name": "TS CosyVoice Model Loader",
+      "category": "TS CosyVoice3/Loaders",
+      "function": "load_model",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model_version": {"type": "COMBO", "options_source": "MODEL_CONFIGS.keys()", "default": "Fun-CosyVoice3-0.5B"},
+          "download_source": {"type": "COMBO", "options": ["HuggingFace", "ModelScope"], "default": "HuggingFace"},
+          "device": {"type": "COMBO", "options": ["auto", "cuda", "cpu", "mps"], "default": "auto"}
+        },
+        "optional": {
+          "fp16": {"type": "BOOLEAN", "default": false}
+        }
+      },
+      "outputs": [
+        {"type": "COSYVOICE_MODEL", "name": "model"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_Instruct2",
+      "class_name": "TS_CosyVoice3_Instruct2",
+      "display_name": "TS CosyVoice Text to Voice",
+      "category": "TS CosyVoice3/Synthesis",
+      "function": "generate_with_instruct",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "text": {"type": "STRING", "default": "Hello, this is my cloned voice speaking.", "multiline": true},
+          "instruct_text": {"type": "STRING", "default": "Speak in a warm and friendly tone.", "multiline": true},
+          "reference_audio": {"type": "AUDIO"},
+          "speed": {"type": "FLOAT", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05, "display": "slider"}
+        },
+        "optional": {
+          "seed": {"type": "INT", "default": 42, "min": -1, "max": 2147483647},
+          "text_normalize": {"type": "BOOLEAN", "default": true},
+          "emotion_preset": {"type": "COMBO", "options_source": "load_emotion_presets()", "default": "Ваша инструкция"}
+        }
+      },
+      "outputs": [
+        {"type": "AUDIO", "name": "audio"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_SpeakerInstruct2",
+      "class_name": "TS_CosyVoice3_SpeakerInstruct2",
+      "display_name": "TS CosyVoice Speaker Text To Voice",
+      "category": "TS CosyVoice3/Synthesis",
+      "function": "speaker_instruct2",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "text": {"type": "STRING", "default": "Hello, this is my cloned voice speaking.", "multiline": true},
+          "instruct_text": {"type": "STRING", "default": "Please say this in a warm and soft voice.", "multiline": true},
+          "speaker_preset": {"type": "COMBO", "options_source": "list_speaker_presets()"},
+          "speed": {"type": "FLOAT", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05, "display": "slider"}
+        },
+        "optional": {
+          "seed": {"type": "INT", "default": 42, "min": -1, "max": 2147483647},
+          "text_normalize": {"type": "BOOLEAN", "default": true},
+          "emotion_preset": {"type": "COMBO", "options_source": "load_emotion_presets()", "default": "Ваша инструкция"}
+        }
+      },
+      "outputs": [
+        {"type": "AUDIO", "name": "audio"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_CrossLingual",
+      "class_name": "TS_CosyVoice3_CrossLingual",
+      "display_name": "TS CosyVoice Cross-Language",
+      "category": "TS CosyVoice3/Synthesis",
+      "function": "cross_lingual_synthesis",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "text": {"type": "STRING", "default": "Hello, this is cross-lingual speech synthesis.", "multiline": true},
+          "reference_audio": {"type": "AUDIO"},
+          "speed": {"type": "FLOAT", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05, "display": "slider"}
+        },
+        "optional": {
+          "target_language": {"type": "COMBO", "options": ["auto", "zh", "en", "ja", "ko", "de", "es", "fr", "it", "ru"], "default": "auto"},
+          "seed": {"type": "INT", "default": 42, "min": -1, "max": 2147483647},
+          "text_normalize": {"type": "BOOLEAN", "default": true}
+        }
+      },
+      "outputs": [
+        {"type": "AUDIO", "name": "audio"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_VoiceConversion",
+      "class_name": "TS_CosyVoice3_VoiceConversion",
+      "display_name": "TS CosyVoice Voice To Voice",
+      "category": "TS CosyVoice3/Synthesis",
+      "function": "convert_voice",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "source_audio": {"type": "AUDIO"},
+          "target_audio": {"type": "AUDIO"},
+          "speed": {"type": "FLOAT", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05, "display": "slider"},
+          "pitch_shift_semitones": {"type": "INT", "default": 0, "min": -12, "max": 12, "step": 1, "display": "slider"}
+        },
+        "optional": {
+          "seed": {"type": "INT", "default": 42, "min": -1, "max": 2147483647}
+        }
+      },
+      "outputs": [
+        {"type": "AUDIO", "name": "audio"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_SaveSpeaker",
+      "class_name": "TS_CosyVoice3_SaveSpeaker",
+      "display_name": "TS CosyVoice Save Speaker",
+      "category": "TS CosyVoice3/Utilities",
+      "function": "save_speaker",
+      "is_output_node": true,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "reference_audio": {"type": "AUDIO"},
+          "reference_text": {"type": "STRING", "default": "", "multiline": true},
+          "speaker_name": {"type": "STRING", "default": "my_speaker", "multiline": false}
+        }
+      },
+      "outputs": [
+        {"type": "STRING", "name": "saved_path"}
+      ]
+    },
+    {
+      "node_id": "TS_CosyVoice3_Dialog",
+      "class_name": "TS_CosyVoice3_Dialog",
+      "display_name": "TS CosyVoice Dialog",
+      "category": "TS CosyVoice3/Synthesis",
+      "function": "generate_dialog",
+      "is_output_node": false,
+      "inputs": {
+        "required": {
+          "model": {"type": "COSYVOICE_MODEL"},
+          "dialog_text": {"type": "STRING", "default": "SPEAKER A: Hello, how are you?\nSPEAKER B: I'm doing great, thanks for asking!", "multiline": true},
+          "speaker_A_Audio": {"type": "AUDIO"},
+          "speaker_B_Audio": {"type": "AUDIO"},
+          "speed": {"type": "FLOAT", "default": 1.0, "min": 0.5, "max": 2.0, "step": 0.05, "display": "slider"}
+        },
+        "optional": {
+          "speaker_C_Audio": {"type": "AUDIO"},
+          "speaker_D_Audio": {"type": "AUDIO"},
+          "seed": {"type": "INT", "default": 42, "min": -1, "max": 2147483647}
+        }
+      },
+      "outputs": [
+        {"type": "AUDIO", "name": "dialog_audio"},
+        {"type": "AUDIO", "name": "speaker_a_audio"},
+        {"type": "AUDIO", "name": "speaker_b_audio"},
+        {"type": "AUDIO", "name": "speaker_c_audio"},
+        {"type": "AUDIO", "name": "speaker_d_audio"},
+        {"type": "STRING", "name": "message"}
+      ]
+    }
+  ]
+}

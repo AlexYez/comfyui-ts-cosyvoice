@@ -1,15 +1,33 @@
 """
-TS CosyVoice3 Voice Conversion Node
-Convert one voice to sound like another (voice-to-voice)
+TS CosyVoice3 Voice Conversion Node (V3 schema).
+Convert one voice to sound like another (voice-to-voice).
+
+Migrated from V1 to V3 on 2026-05-07.
+Public contract preserved:
+- node_id: TS_CosyVoice3_VoiceConversion
+- inputs (required): model, source_audio, target_audio, speed, pitch_shift_semitones
+- inputs (optional): seed
+- outputs: (AUDIO,) named "audio"
+
+Notes:
+- This node is the most complex of the synthesis nodes (long-source chunking,
+  silence-aware split, pitch shift, crossfade concatenation). The migration is
+  pure schema/registration — the inference logic and helpers are untouched.
+- The legacy print()-based logging is preserved verbatim from the V1 node to
+  avoid behavioral drift; switching to the project logger is a separate cleanup.
 """
 
+from __future__ import annotations
+
+import math
 import os
 import sys
-import math
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torchaudio.functional as torchaudio_functional
+
+from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -25,6 +43,7 @@ try:
         tensor_to_comfyui_audio,
     )
     from ..utils.ts_node_utils import set_seed
+    from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import (
         cleanup_temp_file,
@@ -34,6 +53,7 @@ except (ImportError, ValueError):
         tensor_to_comfyui_audio,
     )
     from utils.ts_node_utils import set_seed
+    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
 
@@ -340,85 +360,74 @@ def _concatenate_with_crossfade(waveforms: List[torch.Tensor], sample_rate: int)
     return combined
 
 
-class TS_CosyVoice3_VoiceConversion:
-    """
-    Voice conversion - convert source voice to target voice
-    """
-
-    RETURN_TYPES = ("AUDIO",)
-    RETURN_NAMES = ("audio",)
-    FUNCTION = "convert_voice"
-    CATEGORY = "TS CosyVoice3/Synthesis"
+class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
+    """Voice conversion - convert source voice to target voice."""
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("COSYVOICE_MODEL", {
-                    "description": "CosyVoice model from ModelLoader",
-                    "tooltip": "Загруженная модель CosyVoice из ноды загрузчика."
-                }),
-                "source_audio": ("AUDIO", {
-                    "description": "Source audio to convert",
-                    "tooltip": "Исходное аудио, которое нужно преобразовать в другой тембр."
-                }),
-                "target_audio": ("AUDIO", {
-                    "description": "Target voice reference",
-                    "tooltip": "Референс целевого голоса; будет обрезан до 30 секунд и приведен к оптимальному формату."
-                }),
-                "speed": ("FLOAT", {
-                    "default": 1.0,
-                    "min": 0.5,
-                    "max": 2.0,
-                    "step": 0.05,
-                    "display": "slider",
-                    "description": "Speech speed multiplier",
-                    "tooltip": "Множитель скорости итоговой речи."
-                }),
-                "pitch_shift_semitones": ("INT", {
-                    "default": 0,
-                    "min": -12,
-                    "max": 12,
-                    "step": 1,
-                    "display": "slider",
-                    "description": "Pitch shift for source audio in semitones",
-                    "tooltip": "Сдвиг высоты тона исходного аудио в полутонах перед voice conversion."
-                }),
-            },
-            "optional": {
-                "seed": ("INT", {
-                    "default": 42,
-                    "min": -1,
-                    "max": 2147483647,
-                    "description": "Random seed (-1 for random)",
-                    "tooltip": "Зерно случайности; значение -1 использует случайный seed."
-                }),
-            }
-        }
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="TS_CosyVoice3_VoiceConversion",
+            display_name="TS CosyVoice Voice To Voice",
+            category="TS CosyVoice3/Synthesis",
+            description="Convert source audio to sound like the target voice (voice-to-voice).",
+            inputs=[
+                CosyVoiceModel.Input(
+                    "model",
+                    tooltip="Загруженная модель CosyVoice из ноды загрузчика.",
+                ),
+                IO.Audio.Input(
+                    "source_audio",
+                    tooltip="Исходное аудио, которое нужно преобразовать в другой тембр.",
+                ),
+                IO.Audio.Input(
+                    "target_audio",
+                    tooltip="Референс целевого голоса; будет обрезан до 30 секунд и приведен к оптимальному формату.",
+                ),
+                IO.Float.Input(
+                    "speed",
+                    default=1.0,
+                    min=0.5,
+                    max=2.0,
+                    step=0.05,
+                    display_mode=IO.NumberDisplay.slider,
+                    tooltip="Множитель скорости итоговой речи.",
+                ),
+                IO.Int.Input(
+                    "pitch_shift_semitones",
+                    default=0,
+                    min=-12,
+                    max=12,
+                    step=1,
+                    display_mode=IO.NumberDisplay.slider,
+                    tooltip="Сдвиг высоты тона исходного аудио в полутонах перед voice conversion.",
+                ),
+                IO.Int.Input(
+                    "seed",
+                    default=42,
+                    min=-1,
+                    max=2147483647,
+                    optional=True,
+                    tooltip="Зерно случайности; значение -1 использует случайный seed.",
+                ),
+            ],
+            outputs=[
+                IO.Audio.Output(display_name="audio"),
+            ],
+            search_aliases=[],
+            is_output_node=False,
+        )
 
-    def convert_voice(
-        self,
+    @classmethod
+    def execute(
+        cls,
         model: Dict[str, Any],
         source_audio: Dict[str, Any],
         target_audio: Dict[str, Any],
         speed: float = 1.0,
         pitch_shift_semitones: int = 0,
-        seed: int = 42
-    ) -> Tuple[Dict[str, Any]]:
-        """
-        Convert source voice to target voice
-
-        Args:
-            model: CosyVoice model info dict
-            source_audio: Source audio to convert
-            target_audio: Target voice reference
-            speed: Speech speed
-            pitch_shift_semitones: Pitch shift for source audio
-            seed: Random seed
-
-        Returns:
-            Tuple containing audio dict
-        """
+        seed: int = 42,
+    ) -> IO.NodeOutput:
+        """Convert source voice to target voice."""
         print(f"\n{'='*60}")
         print(f"[TS CosyVoice3 VC] Converting voice...")
         print(f"[TS CosyVoice3 VC] Speed: {speed}x")
@@ -443,13 +452,11 @@ class TS_CosyVoice3_VoiceConversion:
         try:
             set_seed(seed)
 
-            # Get model instance
             cosyvoice_model = model["model"]
-            sample_rate = cosyvoice_model.sample_rate  # Use actual model sample rate (24000 for v2/v3)
+            sample_rate = cosyvoice_model.sample_rate
 
             print(f"[TS CosyVoice3 VC] Model sample rate: {sample_rate} Hz")
 
-            # Check if model supports voice conversion
             if not hasattr(cosyvoice_model, 'inference_vc'):
                 raise RuntimeError("Model does not support voice conversion")
 
@@ -515,11 +522,9 @@ class TS_CosyVoice3_VoiceConversion:
 
             waveform = _concatenate_with_crossfade(converted_chunks, sample_rate)
 
-            # Ensure waveform is on CPU
             if waveform.device != torch.device('cpu'):
                 waveform = waveform.cpu()
 
-            # Convert to ComfyUI AUDIO format
             audio = tensor_to_comfyui_audio(waveform, sample_rate)
 
             duration = waveform.shape[-1] / sample_rate
@@ -532,7 +537,7 @@ class TS_CosyVoice3_VoiceConversion:
             print(f"[TS CosyVoice3 VC] Sample rate: {sample_rate} Hz")
             print(f"{'='*60}\n")
 
-            return (audio,)
+            return IO.NodeOutput(audio)
 
         except Exception as e:
             error_msg = f"Error in voice conversion: {str(e)}"
@@ -542,14 +547,12 @@ class TS_CosyVoice3_VoiceConversion:
             traceback.print_exc()
             print(f"{'='*60}\n")
 
-            # Return empty audio on error
             empty_audio = {
                 "waveform": torch.zeros(1, 1, 22050),
                 "sample_rate": 22050
             }
-            return (empty_audio,)
+            return IO.NodeOutput(empty_audio)
 
         finally:
-            # Clean up temp files
             cleanup_temp_file(source_temp)
             cleanup_temp_file(target_temp)

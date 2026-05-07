@@ -1,12 +1,26 @@
 """
-TS CosyVoice3 Model Loader Node
-Downloads and loads CosyVoice models with automatic weight management
+TS CosyVoice3 Model Loader Node (V3 schema).
+Downloads and loads CosyVoice models with automatic weight management.
+
+Migrated from V1 to V3 on 2026-05-07.
+Public contract preserved:
+- node_id: TS_CosyVoice3_ModelLoader
+- inputs (required): model_version, download_source, device
+- inputs (optional): fp16
+- outputs: (COSYVOICE_MODEL,) named "model"
+The model cache (_MODEL_CACHE in utils.ts_model_manager) stays where it is —
+V3 forbids class-level mutable state but module-level cache is fine.
 """
 
-import torch
-from typing import Tuple, Dict, Any
-import sys
+from __future__ import annotations
+
 import os
+import sys
+from typing import Any, Dict
+
+import torch
+
+from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -16,9 +30,11 @@ if parent_dir not in sys.path:
 try:
     from ..utils.ts_model_manager import get_cached_model, MODEL_CONFIGS
     from ..utils.ts_logging import get_logger, log_banner, log_exception
+    from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_model_manager import get_cached_model, MODEL_CONFIGS
     from utils.ts_logging import get_logger, log_banner, log_exception
+    from nodes._v3_types import CosyVoiceModel
 
 
 LOGGER = get_logger("TS CosyVoice Model Loader")
@@ -64,64 +80,58 @@ def _resolve_target_device(device: str) -> torch.device:
     return torch.device("cpu")
 
 
-class TS_CosyVoice3_ModelLoader:
-    """
-    Load CosyVoice models with automatic downloading and caching
-    """
-
-    RETURN_TYPES = ("COSYVOICE_MODEL",)
-    RETURN_NAMES = ("model",)
-    FUNCTION = "load_model"
-    CATEGORY = "TS CosyVoice3/Loaders"
+class TS_CosyVoice3_ModelLoader(IO.ComfyNode):
+    """Load CosyVoice models with automatic downloading and caching."""
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model_version": (list(MODEL_CONFIGS.keys()), {
-                    "default": "Fun-CosyVoice3-0.5B",
-                    "description": "CosyVoice model version to load",
-                    "tooltip": "Выберите версию модели CosyVoice для загрузки."
-                }),
-                "download_source": (["HuggingFace", "ModelScope"], {
-                    "default": "HuggingFace",
-                    "description": "Source to download model from",
-                    "tooltip": "Источник, из которого будет скачана модель."
-                }),
-                "device": (["auto", "cuda", "cpu", "mps"], {
-                    "default": "auto",
-                    "description": "Device to load model on",
-                    "tooltip": "Устройство для загрузки и запуска модели; auto предпочитает GPU."
-                }),
-            },
-            "optional": {
-                "fp16": ("BOOLEAN", {
-                    "default": False,
-                    "description": "Enable FP16 model loading on supported accelerators",
-                    "tooltip": "Включает FP16 на поддерживаемых ускорителях для снижения расхода видеопамяти."
-                }),
-            }
-        }
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="TS_CosyVoice3_ModelLoader",
+            display_name="TS CosyVoice Model Loader",
+            category="TS CosyVoice3/Loaders",
+            description="Load a CosyVoice model with automatic download and caching.",
+            inputs=[
+                IO.Combo.Input(
+                    "model_version",
+                    options=list(MODEL_CONFIGS.keys()),
+                    default="Fun-CosyVoice3-0.5B",
+                    tooltip="Выберите версию модели CosyVoice для загрузки.",
+                ),
+                IO.Combo.Input(
+                    "download_source",
+                    options=["HuggingFace", "ModelScope"],
+                    default="HuggingFace",
+                    tooltip="Источник, из которого будет скачана модель.",
+                ),
+                IO.Combo.Input(
+                    "device",
+                    options=["auto", "cuda", "cpu", "mps"],
+                    default="auto",
+                    tooltip="Устройство для загрузки и запуска модели; auto предпочитает GPU.",
+                ),
+                IO.Boolean.Input(
+                    "fp16",
+                    default=False,
+                    optional=True,
+                    tooltip="Включает FP16 на поддерживаемых ускорителях для снижения расхода видеопамяти.",
+                ),
+            ],
+            outputs=[
+                CosyVoiceModel.Output(display_name="model"),
+            ],
+            search_aliases=[],
+            is_output_node=False,
+        )
 
-    def load_model(
-        self,
+    @classmethod
+    def execute(
+        cls,
         model_version: str,
         download_source: str = "ModelScope",
         device: str = "auto",
         fp16: bool = False,
-    ) -> Tuple[Dict[str, Any]]:
-        """
-        Load a CosyVoice model
-
-        Args:
-            model_version: Model version to load
-            download_source: Download source (ModelScope or HuggingFace)
-            device: Target device
-            fp16: Enable FP16 model loading when supported
-
-        Returns:
-            Tuple containing model info dict
-        """
+    ) -> IO.NodeOutput:
+        """Load a CosyVoice model and return its info dict as COSYVOICE_MODEL."""
         log_banner(
             LOGGER,
             "[TS CosyVoice Model Loader] Loading model...",
@@ -132,11 +142,9 @@ class TS_CosyVoice3_ModelLoader:
         )
 
         try:
-            # Determine device
             target_device = _resolve_target_device(device)
 
-            # Get cached model
-            model_info = get_cached_model(
+            model_info: Dict[str, Any] = get_cached_model(
                 model_version=model_version,
                 download_source=download_source,
                 device=target_device,
@@ -152,7 +160,7 @@ class TS_CosyVoice3_ModelLoader:
                 Path=model_info["model_path"],
             )
 
-            return (model_info,)
+            return IO.NodeOutput(model_info)
 
         except Exception as e:
             error_msg = f"Error loading model: {str(e)}"

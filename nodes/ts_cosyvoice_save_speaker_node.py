@@ -1,10 +1,23 @@
-"""TS CosyVoice save-speaker node."""
+"""
+TS CosyVoice save-speaker node (V3 schema).
+
+Migrated from V1 to V3 on 2026-05-07.
+Public contract preserved:
+- node_id: TS_CosyVoice3_SaveSpeaker
+- inputs (required): model, reference_audio, reference_text, speaker_name
+- outputs: (STRING,) named "saved_path"
+- is_output_node: True (writes preset .pt to disk)
+"""
+
+from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import torch
+
+from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -22,6 +35,7 @@ try:
     from ..utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_whisper_utils import transcribe_audio
+    from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import (
         REFERENCE_AUDIO_MAX_SECONDS,
@@ -33,6 +47,7 @@ except (ImportError, ValueError):
     from utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_whisper_utils import transcribe_audio
+    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
 import folder_paths
@@ -48,53 +63,57 @@ def get_speaker_save_dir() -> str:
     return speaker_dir
 
 
-class TS_CosyVoice3_SaveSpeaker:
+class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
     """Extract zero-shot speaker features and save them for later reuse."""
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("saved_path",)
-    FUNCTION = "save_speaker"
-    CATEGORY = "TS CosyVoice3/Utilities"
-    OUTPUT_NODE = True
+    @classmethod
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="TS_CosyVoice3_SaveSpeaker",
+            display_name="TS CosyVoice Save Speaker",
+            category="TS CosyVoice3/Utilities",
+            description="Extract zero-shot speaker features from reference audio and save as a .pt preset.",
+            inputs=[
+                CosyVoiceModel.Input(
+                    "model",
+                    tooltip="Загруженная модель CosyVoice из ноды загрузчика.",
+                ),
+                IO.Audio.Input(
+                    "reference_audio",
+                    tooltip="Референсное аудио для сохранения тембра голоса; "
+                            "будет обрезано до 30 секунд и приведено к mono 24 kHz.",
+                ),
+                IO.String.Input(
+                    "reference_text",
+                    default="",
+                    multiline=True,
+                    tooltip="Текст, который произносится в референсном аудио; "
+                            "если оставить пустым, будет использована "
+                            "авторасшифровка Whisper.",
+                ),
+                IO.String.Input(
+                    "speaker_name",
+                    default="my_speaker",
+                    multiline=False,
+                    tooltip="Имя сохраняемого пресета голоса без расширения "
+                            "файла; будет использовано как имя .pt файла.",
+                ),
+            ],
+            outputs=[
+                IO.String.Output(display_name="saved_path"),
+            ],
+            search_aliases=[],
+            is_output_node=True,
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("COSYVOICE_MODEL", {
-                    "description": "CosyVoice model from Model Loader",
-                    "tooltip": "Загруженная модель CosyVoice из ноды загрузчика.",
-                }),
-                "reference_audio": ("AUDIO", {
-                    "description": "Reference audio to extract speaker features from (max 30 seconds, recommended 3-10s)",
-                    "tooltip": "Референсное аудио для сохранения тембра голоса; "
-                               "будет обрезано до 30 секунд и приведено к mono 24 kHz.",
-                }),
-                "reference_text": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "description": "Transcript of the reference audio.",
-                    "tooltip": "Текст, который произносится в референсном аудио; "
-                               "если оставить пустым, будет использована "
-                               "авторасшифровка Whisper.",
-                }),
-                "speaker_name": ("STRING", {
-                    "default": "my_speaker",
-                    "multiline": False,
-                    "description": "Name for this speaker preset (no file extension). Used as the key inside the .pt file and as the filename.",
-                    "tooltip": "Имя сохраняемого пресета голоса без расширения "
-                               "файла; будет использовано как имя .pt файла.",
-                }),
-            },
-        }
-
-    def save_speaker(
-        self,
+    def execute(
+        cls,
         model: Dict[str, Any],
         reference_audio: Dict[str, Any],
         reference_text: str,
         speaker_name: str,
-    ) -> Tuple[str]:
+    ) -> IO.NodeOutput:
         """Extract and persist a reusable speaker preset."""
         log_banner(
             LOGGER,
@@ -174,7 +193,7 @@ class TS_CosyVoice3_SaveSpeaker:
                 SpeakerKey=speaker_name,
                 Keys=", ".join(spk2info[speaker_name].keys()),
             )
-            return (save_path,)
+            return IO.NodeOutput(save_path)
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 SaveSpeaker] ERROR", exc)
             raise RuntimeError(f"Error saving speaker preset: {exc}") from exc

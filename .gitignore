@@ -1,5 +1,4 @@
 LLM_TECHNICAL_DOCUMENTATION.md
-tests/
 __pycache__/
 *.pyc
 *.pyo
@@ -7,3 +6,7 @@ __pycache__/
 .pytest_cache/
 pytest-cache-files-*/
 tmp*/
+
+# Test artefacts (keep tests themselves, drop only outputs)
+tests/e2e/_artifacts/
+tests/.pytest_cache/

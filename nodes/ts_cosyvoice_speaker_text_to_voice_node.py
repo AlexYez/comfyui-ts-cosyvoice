@@ -1,10 +1,23 @@
-"""TS CosyVoice speaker-text-to-voice node."""
+"""
+TS CosyVoice speaker-text-to-voice node (V3 schema).
+
+Migrated from V1 to V3 on 2026-05-07.
+Public contract preserved:
+- node_id: TS_CosyVoice3_SpeakerInstruct2
+- inputs (required): model, text, instruct_text, speaker_preset, speed
+- inputs (optional): seed, text_normalize, emotion_preset
+- outputs: (AUDIO,) named "audio"
+"""
+
+from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 import torch
+
+from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -29,6 +42,7 @@ try:
         merge_speech_chunks,
         set_seed,
     )
+    from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import tensor_to_comfyui_audio
     from utils.ts_cosyvoice_adapter import apply_speaker_prompt_tokens, format_instruct_text, is_cosyvoice3_model_info
@@ -43,6 +57,7 @@ except (ImportError, ValueError):
         merge_speech_chunks,
         set_seed,
     )
+    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
 
@@ -52,80 +67,82 @@ INSTRUCT_PRESETS = load_emotion_presets()
 INSTRUCT_PRESET_OPTIONS = list(INSTRUCT_PRESETS)
 
 
-class TS_CosyVoice3_SpeakerInstruct2:
+class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
     """Synthesize speech from a saved speaker preset and an emotion instruction."""
 
-    RETURN_TYPES = ("AUDIO",)
-    RETURN_NAMES = ("audio",)
-    FUNCTION = "speaker_instruct2"
-    CATEGORY = "TS CosyVoice3/Synthesis"
+    @classmethod
+    def define_schema(cls) -> IO.Schema:
+        return IO.Schema(
+            node_id="TS_CosyVoice3_SpeakerInstruct2",
+            display_name="TS CosyVoice Speaker Text To Voice",
+            category="TS CosyVoice3/Synthesis",
+            description="Synthesize speech using a saved speaker preset (.pt) and an emotion instruction.",
+            inputs=[
+                CosyVoiceModel.Input(
+                    "model",
+                    tooltip="Загруженная модель CosyVoice из ноды загрузчика.",
+                ),
+                IO.String.Input(
+                    "text",
+                    default="Hello, this is my cloned voice speaking.",
+                    multiline=True,
+                    tooltip="Текст, который нужно озвучить выбранным сохраненным голосом.",
+                ),
+                IO.String.Input(
+                    "instruct_text",
+                    default="Please say this in a warm and soft voice.",
+                    multiline=True,
+                    tooltip=f"Текстовая инструкция для эмоции и манеры речи; "
+                            f"используется только при выборе '{CUSTOM_INSTRUCTION_LABEL}'.",
+                ),
+                IO.Combo.Input(
+                    "speaker_preset",
+                    options=list_speaker_presets(),
+                    tooltip="Выберите ранее сохраненный пресет голоса из папки models/cosyvoice/speaker.",
+                ),
+                IO.Float.Input(
+                    "speed",
+                    default=1.0,
+                    min=0.5,
+                    max=2.0,
+                    step=0.05,
+                    display_mode=IO.NumberDisplay.slider,
+                    tooltip="Множитель скорости итоговой речи.",
+                ),
+                IO.Int.Input(
+                    "seed",
+                    default=42,
+                    min=-1,
+                    max=2147483647,
+                    optional=True,
+                    tooltip="Зерно случайности; значение -1 использует случайный seed.",
+                ),
+                IO.Boolean.Input(
+                    "text_normalize",
+                    default=True,
+                    optional=True,
+                    tooltip="Включает нормализацию текста; отключайте для фонем CMU и специальных тегов.",
+                ),
+                IO.Combo.Input(
+                    "emotion_preset",
+                    options=INSTRUCT_PRESET_OPTIONS,
+                    default=CUSTOM_INSTRUCTION_LABEL,
+                    optional=True,
+                    tooltip="Готовый пресет эмоции и манеры подачи; "
+                            f"при выборе '{CUSTOM_INSTRUCTION_LABEL}' "
+                            "используется поле instruct_text.",
+                ),
+            ],
+            outputs=[
+                IO.Audio.Output(display_name="audio"),
+            ],
+            search_aliases=[],
+            is_output_node=False,
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        presets = list_speaker_presets()
-        return {
-            "required": {
-                "model": ("COSYVOICE_MODEL", {
-                    "description": "CosyVoice model from Model Loader",
-                    "tooltip": "Загруженная модель CosyVoice из ноды загрузчика.",
-                }),
-                "text": ("STRING", {
-                    "default": "Hello, this is my cloned voice speaking.",
-                    "multiline": True,
-                    "description": "Text to synthesize",
-                    "tooltip": "Текст, который нужно озвучить выбранным "
-                               "сохраненным голосом.",
-                }),
-                "instruct_text": ("STRING", {
-                    "default": "Please say this in a warm and soft voice.",
-                    "multiline": True,
-                    "description": "Instructions to control speaking style, emotion, and tone. "
-                                   f"Works only when preset is set to '{CUSTOM_INSTRUCTION_LABEL}'.",
-                    "tooltip": "Текстовая инструкция для эмоции и манеры речи; "
-                               f"используется только при выборе '{CUSTOM_INSTRUCTION_LABEL}'.",
-                }),
-                "speaker_preset": (presets, {
-                    "description": "Speaker preset saved by TS CosyVoice3 Save Speaker",
-                    "tooltip": "Выберите ранее сохраненный пресет голоса "
-                               "из папки models/cosyvoice/speaker.",
-                }),
-                "speed": ("FLOAT", {
-                    "default": 1.0,
-                    "min": 0.5,
-                    "max": 2.0,
-                    "step": 0.05,
-                    "display": "slider",
-                    "description": "Speech speed multiplier",
-                    "tooltip": "Множитель скорости итоговой речи.",
-                }),
-            },
-            "optional": {
-                "seed": ("INT", {
-                    "default": 42,
-                    "min": -1,
-                    "max": 2147483647,
-                    "description": "Random seed (-1 for random)",
-                    "tooltip": "Зерно случайности; значение -1 "
-                               "использует случайный seed.",
-                }),
-                "text_normalize": ("BOOLEAN", {
-                    "default": True,
-                    "description": "Enable text normalization. Disable for CMU phonemes or special tags",
-                    "tooltip": "Включает нормализацию текста; "
-                               "отключайте для фонем CMU и специальных тегов.",
-                }),
-                "emotion_preset": (INSTRUCT_PRESET_OPTIONS, {
-                    "default": CUSTOM_INSTRUCTION_LABEL,
-                    "description": "Preset for emotional delivery and speaking style",
-                    "tooltip": "Готовый пресет эмоции и манеры подачи; "
-                               f"при выборе '{CUSTOM_INSTRUCTION_LABEL}' "
-                               "используется поле instruct_text.",
-                }),
-            },
-        }
-
-    def speaker_instruct2(
-        self,
+    def execute(
+        cls,
         model: Dict[str, Any],
         text: str,
         instruct_text: str,
@@ -134,7 +151,7 @@ class TS_CosyVoice3_SpeakerInstruct2:
         seed: int = 42,
         text_normalize: bool = True,
         emotion_preset: str = CUSTOM_INSTRUCTION_LABEL,
-    ) -> Tuple[Dict[str, Any]]:
+    ) -> IO.NodeOutput:
         """Generate instructed speech using a saved speaker preset."""
         resolved_instruct_text = (
             instruct_text.strip()
@@ -238,7 +255,7 @@ class TS_CosyVoice3_SpeakerInstruct2:
                 Duration=f"{duration:.2f} seconds",
                 SampleRate=f"{sample_rate} Hz",
             )
-            return (audio,)
+            return IO.NodeOutput(audio)
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 SpeakerInstruct2] ERROR", exc)
-            return (build_empty_audio(),)
+            return IO.NodeOutput(build_empty_audio())
