@@ -7,6 +7,10 @@ __pycache__/
 pytest-cache-files-*/
 tmp*/
 
+# Local-only AI/engineering notes (kept outside the public repo)
+CLAUDE.md
+MIGRATION_PLAN.md
+
 # Test artefacts (keep tests themselves, drop only outputs)
 tests/e2e/_artifacts/
 tests/.pytest_cache/

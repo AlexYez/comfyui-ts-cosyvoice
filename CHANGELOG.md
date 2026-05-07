@@ -25,10 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to a single `_PackExtension` registered through `comfy_entrypoint()`.
 - Custom IO type `COSYVOICE_MODEL` is now declared once in
   `nodes/_v3_types.py` and imported by every consumer.
-- `CLAUDE.md` rewritten as V3-only after the migration completed.
 
 ### Added
-- `MIGRATION_PLAN.md` documenting the V1 → V3 migration plan and progress.
 - `docs/adr/0001-migrate-v1-to-v3.md` — architecture decision record for the
   schema migration.
 - `tests/contracts/v1_baseline.json` — frozen V1 contract snapshot used as the

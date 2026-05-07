@@ -361,7 +361,7 @@ ComfyUI/
 > **Полная миграция на ComfyUI V3 schema** (`IO.ComfyNode` + `define_schema` + `IO.NodeOutput`, привязано к `comfy_api.v0_0_2`).
 > Все `node_id`, имена входов/выходов и их порядок **сохранены** — ваши workflow JSON-ы продолжают работать без изменений.
 
-**Подробности:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md), [MIGRATION_PLAN.md](./MIGRATION_PLAN.md).
+**Подробности:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md).
 
 **Минимальная версия ComfyUI:** `>=0.3.40`.
 
@@ -729,7 +729,7 @@ ComfyUI/
 > **Full migration to ComfyUI V3 schema** (`IO.ComfyNode` + `define_schema` + `IO.NodeOutput`, pinned to `comfy_api.v0_0_2`).
 > All `node_id` strings, input/output names and ordering are **preserved** — your existing workflow JSONs keep working without modification.
 
-**Details:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md), [MIGRATION_PLAN.md](./MIGRATION_PLAN.md).
+**Details:** [CHANGELOG.md](./CHANGELOG.md), [ADR 0001](./docs/adr/0001-migrate-v1-to-v3.md).
 
 **Minimum ComfyUI:** `>=0.3.40`.
 
