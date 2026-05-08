@@ -404,7 +404,7 @@ ComfyUI/
 
 - 🏠 **Репозиторий:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Модель:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **Лицензия:** [MIT](./LICENSE)
+- 📜 **Лицензия:** [MIT](./LICENSE) (vendored код в `cosyvoice/` и `matcha/` распространяется под собственными лицензиями — Apache-2.0 и MIT соответственно).
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Сообщество:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 
@@ -805,7 +805,7 @@ ComfyUI/
 
 - 🏠 **Repository:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Model:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **License:** [MIT](./LICENSE)
+- 📜 **License:** [MIT](./LICENSE) (vendored code under `cosyvoice/` and `matcha/` keeps its own licenses — Apache-2.0 and MIT respectively).
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Community:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 
