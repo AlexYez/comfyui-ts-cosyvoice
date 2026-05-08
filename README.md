@@ -9,7 +9,7 @@
 
 [![Version](https://img.shields.io/badge/version-0.7.0-blue?style=flat-square)](./CHANGELOG.md)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](./pyproject.toml)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
 [![Tests](https://img.shields.io/badge/tests-29%20passing-brightgreen?style=flat-square)](./tests)
 
@@ -404,7 +404,7 @@ ComfyUI/
 
 - 🏠 **Репозиторий:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Модель:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **Лицензия:** Apache 2.0
+- 📜 **Лицензия:** [MIT](./LICENSE)
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Сообщество:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 
@@ -805,7 +805,7 @@ ComfyUI/
 
 - 🏠 **Repository:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Model:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **License:** Apache 2.0
+- 📜 **License:** [MIT](./LICENSE)
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Community:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 
