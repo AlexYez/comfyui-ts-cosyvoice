@@ -1,0 +1,12 @@
+# Dev-only assets — excluded from the registry zip.
+# comfy-cli respects .comfyignore (gitwildmatch syntax, like .gitignore).
+# Keeping these out of the published archive avoids false-positive flags
+# from the registry security scanner (subprocess + monkeypatched CosyVoice
+# runtime in dev tooling) and trims pack size for end users.
+
+# Test suite — uses subprocess, fixtures, mocks of CosyVoice runtime.
+tests/
+pytest.ini
+
+# CI workflows and issue / PR templates — not needed at install time.
+.github/
