@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-06-09
+
+### Fixed
+- **Windows install:** replaced the declared `WeTextProcessing` dependency with
+  `wetext` in `requirements.txt` and `pyproject.toml`. `WeTextProcessing` pulled
+  in `pynini==2.1.6`, which builds from source and fails under MSVC on native
+  Windows (GCC-only compiler flags such as `-Wno-register` / `-funsigned-char`
+  passed to `cl.exe`). The vendored CosyVoice frontend
+  (`cosyvoice/cli/frontend.py`) has always imported `wetext`, not
+  `WeTextProcessing` — so the old dependency was simultaneously broken on Windows
+  and never actually used (no `tn` / `itn` import anywhere in the pack). `wetext`
+  does not depend on `pynini`; its only compiled dependency, `kaldifst`, ships
+  prebuilt Windows wheels (cp310–cp313 `win_amd64`), so the pack now installs
+  cleanly on Windows portable ComfyUI without a C++ toolchain.
+
+## [0.8.0] - 2026-05-13
+
+### Changed
+- Project license switched to **MIT** (standalone pure `LICENSE` file so GitHub
+  detects it correctly).
+- Dev/runtime split: development-only files (`tests/`, `project_memory/`,
+  `pytest.ini`, `CLAUDE.md`) are kept out of the published pack and live only in
+  the development checkout.
+
+### Added
+- `.comfyignore` to exclude dev-only files from the ComfyRegistry distribution.
+
 ## [0.7.0] - 2026-05-07
 
 ### Changed

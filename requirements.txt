@@ -17,7 +17,7 @@ pydantic>=2.0.0
 x-transformers>=2.0.0
 openai-whisper
 diffusers>=0.29.0
-WeTextProcessing
+wetext
 pyarrow>=14.0.0
 pyworld>=0.3.0
 regex
