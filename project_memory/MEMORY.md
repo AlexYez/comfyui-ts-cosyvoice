@@ -1,2 +1,0 @@
-- [comfyui-ts-cosyvoice registry audit](project_cosyvoice_registry_audit.md) — карта bandit-триггеров vendored CosyVoice (2026-05-13, все версии Active)
-- [comfyui-ts-cosyvoice vendored policy](feedback_cosyvoice_vendored_policy.md) — не предлагать профилактическую чистку vendored, пока пак Active

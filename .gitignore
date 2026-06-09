@@ -11,6 +11,10 @@ tmp*/
 CLAUDE.md
 MIGRATION_PLAN.md
 
-# Test artefacts (keep tests themselves, drop only outputs)
-tests/e2e/_artifacts/
-tests/.pytest_cache/
+# Dev-only — NOT published to GitHub. These live only in the dev
+# source-of-truth folder; the runtime copy pulls from GitHub and so
+# stays free of tests, session memory and editor settings.
+.claude/
+project_memory/
+tests/
+pytest.ini
