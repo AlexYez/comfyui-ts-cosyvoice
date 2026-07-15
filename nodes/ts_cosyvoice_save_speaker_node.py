@@ -15,8 +15,6 @@ import os
 import sys
 from typing import Any, Dict
 
-import torch
-
 from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +32,7 @@ try:
     )
     from ..utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
+    from ..utils.ts_speaker_io import sanitize_speaker_name, save_speaker_preset
     from ..utils.ts_whisper_utils import transcribe_audio
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
@@ -46,21 +45,14 @@ except (ImportError, ValueError):
     )
     from utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
+    from utils.ts_speaker_io import sanitize_speaker_name, save_speaker_preset
     from utils.ts_whisper_utils import transcribe_audio
     from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-import folder_paths
 
 
 LOGGER = get_logger("TS CosyVoice Save Speaker")
-
-
-def get_speaker_save_dir() -> str:
-    """Return the writable speaker preset directory."""
-    speaker_dir = os.path.join(folder_paths.models_dir, "cosyvoice", "speaker")
-    os.makedirs(speaker_dir, exist_ok=True)
-    return speaker_dir
 
 
 class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
@@ -122,9 +114,8 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
             ReferenceText=preview_text(reference_text, 60),
         )
 
-        speaker_name = speaker_name.strip()
-        if not speaker_name:
-            raise ValueError("speaker_name cannot be empty.")
+        # Reject path separators / traversal / reserved names before any disk work.
+        speaker_name = sanitize_speaker_name(speaker_name)
 
         temp_file = None
         try:
@@ -178,12 +169,9 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
             del model_input["text"]
             del model_input["text_len"]
 
-            spk2info = {speaker_name: model_input}
             pbar.update_absolute(2, 3)
 
-            save_dir = get_speaker_save_dir()
-            save_path = os.path.join(save_dir, f"{speaker_name}.pt")
-            torch.save(spk2info, save_path)
+            save_path = save_speaker_preset(speaker_name, model_input)
             pbar.update_absolute(3, 3)
 
             log_banner(
@@ -191,7 +179,7 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
                 "[TS CosyVoice3 SaveSpeaker] Saved successfully",
                 Path=save_path,
                 SpeakerKey=speaker_name,
-                Keys=", ".join(spk2info[speaker_name].keys()),
+                Keys=", ".join(model_input.keys()),
             )
             return IO.NodeOutput(save_path)
         except Exception as exc:

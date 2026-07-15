@@ -1,7 +1,14 @@
-import os
-from typing import Any, Dict
+"""
+Whisper auto-transcription helpers for TS CosyVoice3.
 
-import folder_paths
+Whisper is optional: if it is missing or transcription fails, the callers fall back
+to an empty reference text rather than failing the node (§9).
+
+Model-family detection lives in `ts_cosyvoice_adapter.is_cosyvoice3_model_info` —
+this module used to carry a second, subtly different copy of it.
+"""
+
+import os
 
 try:
     from .ts_logging import get_logger
@@ -14,6 +21,8 @@ LOGGER = get_logger("TS CosyVoice3 Whisper")
 
 
 def get_whisper_download_dir() -> str:
+    import folder_paths
+
     whisper_dir = os.path.join(folder_paths.models_dir, "whisper")
     os.makedirs(whisper_dir, exist_ok=True)
     return whisper_dir
@@ -48,8 +57,3 @@ def transcribe_audio(audio_path: str, log_prefix: str) -> str:
     except Exception as e:
         LOGGER.error("[%s] Whisper transcription failed: %s", log_prefix, e)
         return ""
-
-
-def is_cosyvoice3_model(model_info: Dict[str, Any]) -> bool:
-    version = model_info.get("model_version", "").lower()
-    return "cosyvoice3" in version or "fun-cosyvoice3" in version

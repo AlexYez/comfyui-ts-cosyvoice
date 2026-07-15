@@ -1,21 +1,42 @@
 """
 Audio Utilities for TS CosyVoice3
 Handles audio format conversions and processing
+
+Heavy runtime dependencies (torch, torchaudio, soundfile) are imported inside the
+functions that need them: this module is pulled in by every synthesis node at pack
+import time, and a module-level import would make one missing optional dependency
+prevent ComfyUI from registering any node of the pack.
 """
 
-import torch
-import torchaudio
-import soundfile as sf
-import tempfile
 import os
-from typing import Dict, Any, Tuple, Optional
+import tempfile
+from typing import Any, Dict, Optional, Tuple
 
+try:
+    from .ts_logging import get_logger
+except (ImportError, ValueError):
+    from ts_logging import get_logger
+
+
+LOGGER = get_logger("TS CosyVoice3 Audio Utils")
 
 REFERENCE_AUDIO_SAMPLE_RATE = 24000
 REFERENCE_AUDIO_MAX_SECONDS = 30.0
 
 
-def comfyui_audio_to_tensor(audio: Dict[str, Any]) -> Tuple[torch.Tensor, int]:
+def _require_soundfile():
+    """Import soundfile lazily with an actionable error message."""
+    try:
+        import soundfile as sf
+    except ImportError as exc:
+        raise RuntimeError(
+            "[TS CosyVoice3 Audio Utils] soundfile is not installed, so audio cannot be "
+            "written for CosyVoice. Install requirements.txt and restart ComfyUI."
+        ) from exc
+    return sf
+
+
+def comfyui_audio_to_tensor(audio: Dict[str, Any]) -> Tuple[Any, int]:
     """
     Convert ComfyUI AUDIO format to tensor and sample rate
 
@@ -31,7 +52,7 @@ def comfyui_audio_to_tensor(audio: Dict[str, Any]) -> Tuple[torch.Tensor, int]:
     return waveform, sample_rate
 
 
-def tensor_to_comfyui_audio(waveform: torch.Tensor, sample_rate: int) -> Dict[str, Any]:
+def tensor_to_comfyui_audio(waveform: Any, sample_rate: int) -> Dict[str, Any]:
     """
     Convert tensor to ComfyUI AUDIO format
 
@@ -42,6 +63,8 @@ def tensor_to_comfyui_audio(waveform: torch.Tensor, sample_rate: int) -> Dict[st
     Returns:
         ComfyUI audio dict
     """
+    import torch
+
     # Ensure waveform is on CPU
     if waveform.device != torch.device('cpu'):
         waveform = waveform.cpu()
@@ -61,7 +84,7 @@ def tensor_to_comfyui_audio(waveform: torch.Tensor, sample_rate: int) -> Dict[st
     }
 
 
-def save_audio_to_tempfile(waveform: torch.Tensor, sample_rate: int, suffix: str = ".wav") -> str:
+def save_audio_to_tempfile(waveform: Any, sample_rate: int, suffix: str = ".wav") -> str:
     """
     Save audio tensor to a temporary file
 
@@ -73,6 +96,10 @@ def save_audio_to_tempfile(waveform: torch.Tensor, sample_rate: int, suffix: str
     Returns:
         Path to temporary file
     """
+    import torch
+
+    sf = _require_soundfile()
+
     # Ensure waveform is on CPU
     if waveform.device != torch.device('cpu'):
         waveform = waveform.cpu()
@@ -96,34 +123,7 @@ def save_audio_to_tempfile(waveform: torch.Tensor, sample_rate: int, suffix: str
     return temp_path
 
 
-def load_audio_from_path(audio_path: str, target_sample_rate: Optional[int] = None) -> Dict[str, Any]:
-    """
-    Load audio file from path into ComfyUI AUDIO format
-
-    Args:
-        audio_path: Path to audio file
-        target_sample_rate: Target sample rate (None to keep original)
-
-    Returns:
-        ComfyUI audio dict
-    """
-    if not os.path.exists(audio_path):
-        raise FileNotFoundError(f"Audio file not found: {audio_path}")
-
-    # Load audio
-    waveform, sample_rate = torchaudio.load(audio_path)
-
-    # Resample if needed
-    if target_sample_rate is not None and target_sample_rate != sample_rate:
-        resampler = torchaudio.transforms.Resample(sample_rate, target_sample_rate)
-        waveform = resampler(waveform)
-        sample_rate = target_sample_rate
-
-    # Convert to ComfyUI format
-    return tensor_to_comfyui_audio(waveform, sample_rate)
-
-
-def resample_audio(waveform: torch.Tensor, orig_sample_rate: int, target_sample_rate: int) -> torch.Tensor:
+def resample_audio(waveform: Any, orig_sample_rate: int, target_sample_rate: int) -> Any:
     """
     Resample audio tensor to target sample rate
 
@@ -138,11 +138,13 @@ def resample_audio(waveform: torch.Tensor, orig_sample_rate: int, target_sample_
     if orig_sample_rate == target_sample_rate:
         return waveform
 
+    import torchaudio
+
     resampler = torchaudio.transforms.Resample(orig_sample_rate, target_sample_rate)
     return resampler(waveform)
 
 
-def ensure_mono(waveform: torch.Tensor) -> torch.Tensor:
+def ensure_mono(waveform: Any) -> Any:
     """
     Convert audio to mono by averaging channels
 
@@ -157,46 +159,6 @@ def ensure_mono(waveform: torch.Tensor) -> torch.Tensor:
 
     # Average across channels
     return waveform.mean(dim=-2, keepdim=True)
-
-
-def ensure_stereo(waveform: torch.Tensor) -> torch.Tensor:
-    """
-    Convert audio to stereo
-
-    Args:
-        waveform: Audio tensor [..., channels, samples]
-
-    Returns:
-        Stereo audio tensor [..., 2, samples]
-    """
-    if waveform.shape[-2] == 2:
-        return waveform
-
-    if waveform.shape[-2] == 1:
-        # Duplicate mono to stereo
-        return waveform.repeat(*([1] * (waveform.ndim - 2)), 2, 1)
-
-    # Multiple channels - take first two
-    return waveform[..., :2, :]
-
-
-def normalize_audio(waveform: torch.Tensor, target_peak: float = 0.95) -> torch.Tensor:
-    """
-    Normalize audio to target peak amplitude
-
-    Args:
-        waveform: Audio tensor
-        target_peak: Target peak amplitude (0.0 - 1.0)
-
-    Returns:
-        Normalized audio tensor
-    """
-    current_peak = waveform.abs().max()
-
-    if current_peak > 0:
-        waveform = waveform * (target_peak / current_peak)
-
-    return waveform
 
 
 def prepare_reference_audio_for_cosyvoice(
@@ -249,7 +211,7 @@ def prepare_audio_for_cosyvoice(
     audio: Dict[str, Any],
     target_sample_rate: int = 16000,
     mono: bool = True
-) -> Tuple[torch.Tensor, int, Optional[str]]:
+) -> Tuple[Any, int, Optional[str]]:
     """
     Prepare ComfyUI audio for CosyVoice inference
 
@@ -295,6 +257,10 @@ def save_raw_audio_to_tempfile(audio: Dict[str, Any]) -> str:
     Returns:
         Path to temporary file
     """
+    import torch
+
+    sf = _require_soundfile()
+
     waveform = audio['waveform']
     sample_rate = audio['sample_rate']
 
@@ -320,15 +286,19 @@ def save_raw_audio_to_tempfile(audio: Dict[str, Any]) -> str:
     return temp_path
 
 
-def cleanup_temp_file(temp_path: Optional[str]):
+def cleanup_temp_file(temp_path: Optional[str]) -> None:
     """
     Clean up temporary audio file
 
     Args:
         temp_path: Path to temporary file
     """
-    if temp_path and os.path.exists(temp_path):
-        try:
-            os.unlink(temp_path)
-        except:
-            pass
+    if not temp_path or not os.path.exists(temp_path):
+        return
+
+    try:
+        os.unlink(temp_path)
+    except OSError as e:
+        # A leaked temp file is not worth failing a finished generation over;
+        # the OS cleans the temp dir eventually.
+        LOGGER.debug("[TS CosyVoice3 Audio Utils] Could not remove temp file %s: %s", temp_path, e)

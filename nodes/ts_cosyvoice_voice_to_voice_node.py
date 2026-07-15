@@ -11,10 +11,8 @@ Public contract preserved:
 
 Notes:
 - This node is the most complex of the synthesis nodes (long-source chunking,
-  silence-aware split, pitch shift, crossfade concatenation). The migration is
-  pure schema/registration — the inference logic and helpers are untouched.
-- The legacy print()-based logging is preserved verbatim from the V1 node to
-  avoid behavioral drift; switching to the project logger is a separate cleanup.
+  silence-aware split, pitch shift, crossfade concatenation). The migration was
+  pure schema/registration — the inference logic and helpers are unchanged.
 """
 
 from __future__ import annotations
@@ -22,12 +20,12 @@ from __future__ import annotations
 import math
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
-
-import torch
-import torchaudio.functional as torchaudio_functional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from comfy_api.v0_0_2 import IO
+
+if TYPE_CHECKING:  # annotations only — torch is imported lazily where it is used
+    import torch
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -42,6 +40,7 @@ try:
         resample_audio,
         tensor_to_comfyui_audio,
     )
+    from ..utils.ts_logging import get_logger, log_banner, log_exception
     from ..utils.ts_node_utils import set_seed
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
@@ -52,10 +51,14 @@ except (ImportError, ValueError):
         resample_audio,
         tensor_to_comfyui_audio,
     )
+    from utils.ts_logging import get_logger, log_banner, log_exception
     from utils.ts_node_utils import set_seed
     from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
+
+
+LOGGER = get_logger("TS CosyVoice Voice To Voice")
 
 
 MAX_SOURCE_CHUNK_DURATION_SECONDS = 24.0
@@ -148,6 +151,9 @@ def _prepare_reference_audio_for_model(audio: Dict[str, Any], target_sample_rate
 
 def _apply_pitch_shift(audio: Dict[str, Any], semitones: float) -> Dict[str, Any]:
     """Pitch-shift source audio while preserving duration."""
+    import torch
+    import torchaudio.functional as torchaudio_functional
+
     if abs(semitones) < 1e-6:
         return audio
 
@@ -174,7 +180,12 @@ def _apply_pitch_shift(audio: Dict[str, Any], semitones: float) -> Dict[str, Any
             win_length=n_fft,
             hop_length=hop_length,
         )
-    except Exception:
+    except Exception as exc:
+        LOGGER.warning(
+            "[TS CosyVoice3 VC] torchaudio pitch_shift failed (%s); falling back to librosa "
+            "(slower, same result)",
+            exc,
+        )
         import librosa
 
         shifted_channels: List[torch.Tensor] = []
@@ -206,7 +217,15 @@ def _get_silence_intervals(
     sample_rate: int,
     min_silence_duration_seconds: float,
 ) -> List[Tuple[int, int]]:
-    """Detect silence intervals using librosa's non-silent split."""
+    """
+    Detect silence intervals using librosa's non-silent split.
+
+    Silence detection only decides *where* a long source is cut, so it is treated
+    as an optimisation: if librosa is missing or unusable (e.g. its numba backend
+    disagrees with the installed NumPy), we return no intervals and the caller
+    falls back to fixed-size chunks. A cut may then land mid-word, but the
+    conversion still runs (§14: optional deps fail gracefully).
+    """
     mono_waveform = waveform.mean(dim=0) if waveform.shape[0] > 1 else waveform[0]
     mono_waveform = mono_waveform.detach().cpu().float()
 
@@ -217,16 +236,25 @@ def _get_silence_intervals(
     if peak <= 1e-6:
         return [(0, mono_waveform.shape[-1])]
 
-    import librosa
-
     frame_length = max(2048, int(sample_rate * 0.05))
     hop_length = max(512, int(sample_rate * 0.01))
-    nonsilent_intervals = librosa.effects.split(
-        mono_waveform.numpy(),
-        top_db=LIBROSA_TOP_DB,
-        frame_length=frame_length,
-        hop_length=hop_length,
-    )
+
+    try:
+        import librosa
+
+        nonsilent_intervals = librosa.effects.split(
+            mono_waveform.numpy(),
+            top_db=LIBROSA_TOP_DB,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
+    except Exception as exc:
+        LOGGER.warning(
+            "[TS CosyVoice3 VC] Silence detection unavailable (%s); falling back to "
+            "fixed-size chunks — splits may land mid-word",
+            exc,
+        )
+        return []
 
     min_silence_samples = int(min_silence_duration_seconds * sample_rate)
     silence_intervals: List[Tuple[int, int]] = []
@@ -245,7 +273,8 @@ def _get_silence_intervals(
 
 
 def _split_source_audio_into_chunks(audio: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Split source audio into <= 29.5 second chunks, preferring silence boundaries."""
+    """Split source audio into chunks of at most MAX_SOURCE_CHUNK_DURATION_SECONDS,
+    preferring silence boundaries so a split never lands mid-word."""
     waveform = _extract_waveform(audio)
     sample_rate = audio["sample_rate"]
     total_samples = waveform.shape[-1]
@@ -282,10 +311,12 @@ def _split_source_audio_into_chunks(audio: Dict[str, Any]) -> List[Dict[str, Any
 
             candidate = (overlap_start + overlap_end) // 2
             if candidate >= earliest_end:
+                # Prefer the silence closest to the chunk limit: it yields the
+                # fewest chunks while still splitting on a pause.
                 distance_to_limit = latest_end - candidate
                 if best_distance is None or distance_to_limit < best_distance:
                     best_distance = distance_to_limit
-                split_point = candidate
+                    split_point = candidate
 
         if split_point is None or split_point <= start:
             split_point = latest_end
@@ -303,6 +334,8 @@ def _collect_inference_output(
     speed: float,
 ) -> torch.Tensor:
     """Run inference_vc and merge streamed model chunks for a single source chunk."""
+    import torch
+
     output = cosyvoice_model.inference_vc(
         source_wav=source_temp,
         prompt_wav=target_temp,
@@ -325,6 +358,8 @@ def _collect_inference_output(
 
 def _concatenate_with_crossfade(waveforms: List[torch.Tensor], sample_rate: int) -> torch.Tensor:
     """Concatenate converted chunks with boundary fades while preserving full duration."""
+    import torch
+
     if not waveforms:
         raise ValueError("No waveforms to concatenate")
 
@@ -428,10 +463,11 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
         seed: int = 42,
     ) -> IO.NodeOutput:
         """Convert source voice to target voice."""
-        print(f"\n{'='*60}")
-        print(f"[TS CosyVoice3 VC] Converting voice...")
-        print(f"[TS CosyVoice3 VC] Speed: {speed}x")
-        print(f"{'='*60}\n")
+        log_banner(
+            LOGGER,
+            "[TS CosyVoice3 VC] Converting voice...",
+            Speed=f"{speed}x",
+        )
 
         source_waveform = _extract_waveform(source_audio)
         source_sample_rate = source_audio["sample_rate"]
@@ -455,7 +491,7 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
             cosyvoice_model = model["model"]
             sample_rate = cosyvoice_model.sample_rate
 
-            print(f"[TS CosyVoice3 VC] Model sample rate: {sample_rate} Hz")
+            LOGGER.info("[TS CosyVoice3 VC] Model sample rate: %s Hz", sample_rate)
 
             if not hasattr(cosyvoice_model, 'inference_vc'):
                 raise RuntimeError("Model does not support voice conversion")
@@ -468,41 +504,49 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
                 processed_source_audio = _apply_pitch_shift(processed_source_audio, pitch_shift_semitones)
 
             if abs(pitch_shift_semitones) >= 1e-6:
-                print(f"[TS CosyVoice3 VC] Applying pitch shift: {pitch_shift_semitones:+.0f} semitones")
+                LOGGER.info(
+                    "[TS CosyVoice3 VC] Applying pitch shift: %+.0f semitones",
+                    pitch_shift_semitones,
+                )
 
             trimmed_target_audio = _trim_audio_to_duration(target_audio, MAX_TARGET_REFERENCE_SECONDS)
             trimmed_target_audio = _prepare_reference_audio_for_model(trimmed_target_audio, sample_rate)
             trimmed_target_duration = _extract_waveform(trimmed_target_audio).shape[-1] / trimmed_target_audio["sample_rate"]
             if target_duration > MAX_TARGET_REFERENCE_SECONDS:
-                print(
-                    "[TS CosyVoice3 VC] Target audio is longer than 30s, "
-                    f"trimming reference to {trimmed_target_duration:.1f}s"
+                LOGGER.info(
+                    "[TS CosyVoice3 VC] Target audio is longer than %.0fs, trimming reference to %.1fs",
+                    MAX_TARGET_REFERENCE_SECONDS,
+                    trimmed_target_duration,
                 )
 
             source_chunks = _split_source_audio_into_chunks(processed_source_audio)
             total_chunks = len(source_chunks)
-            print(
-                f"[TS CosyVoice3 VC] Source audio: {source_duration:.1f}s -> "
-                f"{total_chunks} chunk(s) up to {MAX_SOURCE_CHUNK_DURATION_SECONDS:.1f}s"
+            LOGGER.info(
+                "[TS CosyVoice3 VC] Source audio: %.1fs -> %s chunk(s) up to %.1fs",
+                source_duration,
+                total_chunks,
+                MAX_SOURCE_CHUNK_DURATION_SECONDS,
             )
 
             total_steps = total_chunks + 2
             pbar = comfy.utils.ProgressBar(total_steps)
             pbar.update_absolute(0, total_steps)
 
-            print(f"[TS CosyVoice3 VC] Preparing target audio ({trimmed_target_duration:.1f}s)...")
+            LOGGER.info("[TS CosyVoice3 VC] Preparing target audio (%.1fs)...", trimmed_target_duration)
             _, _, target_temp = prepare_audio_for_cosyvoice(trimmed_target_audio, target_sample_rate=sample_rate)
             pbar.update_absolute(1, total_steps)
 
-            print(f"[TS CosyVoice3 VC] Running voice conversion...")
+            LOGGER.info("[TS CosyVoice3 VC] Running voice conversion...")
 
-            converted_chunks: List[torch.Tensor] = []
+            converted_chunks: List[Any] = []
             for chunk_index, source_chunk in enumerate(source_chunks, start=1):
                 chunk_duration = _extract_waveform(source_chunk).shape[-1] / source_chunk["sample_rate"]
                 source_temp = None
-                print(
-                    f"[TS CosyVoice3 VC] Preparing source chunk {chunk_index}/{total_chunks} "
-                    f"({chunk_duration:.1f}s)..."
+                LOGGER.info(
+                    "[TS CosyVoice3 VC] Preparing source chunk %s/%s (%.1fs)...",
+                    chunk_index,
+                    total_chunks,
+                    chunk_duration,
                 )
                 _, _, source_temp = prepare_audio_for_cosyvoice(source_chunk, target_sample_rate=SOURCE_VC_SAMPLE_RATE)
 
@@ -517,13 +561,14 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
                     cleanup_temp_file(source_temp)
 
                 converted_chunks.append(converted_chunk)
-                print(f"[TS CosyVoice3 VC] Processed source chunk {chunk_index}/{total_chunks}")
+                LOGGER.info(
+                    "[TS CosyVoice3 VC] Processed source chunk %s/%s",
+                    chunk_index,
+                    total_chunks,
+                )
                 pbar.update_absolute(chunk_index + 1, total_steps)
 
             waveform = _concatenate_with_crossfade(converted_chunks, sample_rate)
-
-            if waveform.device != torch.device('cpu'):
-                waveform = waveform.cpu()
 
             audio = tensor_to_comfyui_audio(waveform, sample_rate)
 
@@ -531,27 +576,18 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
 
             pbar.update_absolute(total_steps, total_steps)
 
-            print(f"\n{'='*60}")
-            print(f"[TS CosyVoice3 VC] Voice conversion successful!")
-            print(f"[TS CosyVoice3 VC] Duration: {duration:.2f} seconds")
-            print(f"[TS CosyVoice3 VC] Sample rate: {sample_rate} Hz")
-            print(f"{'='*60}\n")
+            log_banner(
+                LOGGER,
+                "[TS CosyVoice3 VC] Voice conversion successful!",
+                Duration=f"{duration:.2f} seconds",
+                SampleRate=f"{sample_rate} Hz",
+            )
 
             return IO.NodeOutput(audio)
 
-        except Exception as e:
-            error_msg = f"Error in voice conversion: {str(e)}"
-            print(f"\n{'='*60}")
-            print(f"[TS CosyVoice3 VC] ERROR: {error_msg}")
-            import traceback
-            traceback.print_exc()
-            print(f"{'='*60}\n")
-
-            empty_audio = {
-                "waveform": torch.zeros(1, 1, 22050),
-                "sample_rate": 22050
-            }
-            return IO.NodeOutput(empty_audio)
+        except Exception as exc:
+            log_exception(LOGGER, "[TS CosyVoice3 VC] ERROR", exc)
+            raise
 
         finally:
             cleanup_temp_file(source_temp)

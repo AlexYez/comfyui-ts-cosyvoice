@@ -15,8 +15,6 @@ import os
 import sys
 from typing import Any, Dict
 
-import torch
-
 from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,13 +32,17 @@ try:
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
-        build_empty_audio,
         collect_speech_chunks,
-        get_speaker_dir,
-        list_speaker_presets,
         load_emotion_presets,
         merge_speech_chunks,
+        resolve_instruct_text,
         set_seed,
+    )
+    from ..utils.ts_speaker_io import (
+        NONE_PRESET,
+        inject_speaker_preset,
+        list_speaker_presets,
+        load_speaker_preset,
     )
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
@@ -49,13 +51,17 @@ except (ImportError, ValueError):
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
-        build_empty_audio,
         collect_speech_chunks,
-        get_speaker_dir,
-        list_speaker_presets,
         load_emotion_presets,
         merge_speech_chunks,
+        resolve_instruct_text,
         set_seed,
+    )
+    from utils.ts_speaker_io import (
+        NONE_PRESET,
+        inject_speaker_preset,
+        list_speaker_presets,
+        load_speaker_preset,
     )
     from nodes._v3_types import CosyVoiceModel
 
@@ -63,8 +69,9 @@ import comfy.utils
 
 
 LOGGER = get_logger("TS CosyVoice Speaker Text To Voice")
-INSTRUCT_PRESETS = load_emotion_presets()
-INSTRUCT_PRESET_OPTIONS = list(INSTRUCT_PRESETS)
+# Widget options are read once at schema build time (ComfyUI caches the schema);
+# the effective instruction is resolved per call via resolve_instruct_text().
+INSTRUCT_PRESET_OPTIONS = list(load_emotion_presets())
 
 
 class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
@@ -153,11 +160,7 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
         emotion_preset: str = CUSTOM_INSTRUCTION_LABEL,
     ) -> IO.NodeOutput:
         """Generate instructed speech using a saved speaker preset."""
-        resolved_instruct_text = (
-            instruct_text.strip()
-            if emotion_preset == CUSTOM_INSTRUCTION_LABEL
-            else INSTRUCT_PRESETS.get(emotion_preset, "")
-        )
+        resolved_instruct_text = resolve_instruct_text(instruct_text, emotion_preset)
 
         log_banner(
             LOGGER,
@@ -169,7 +172,7 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
         )
         LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Instruct: %s", preview_text(resolved_instruct_text, 80))
 
-        if speaker_preset == "[none]":
+        if speaker_preset == NONE_PRESET:
             raise ValueError(
                 "No speaker presets found. "
                 "Please use the TS CosyVoice3 Save Speaker node to create one first."
@@ -193,22 +196,16 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
             pbar = comfy.utils.ProgressBar(3)
             pbar.update_absolute(0, 3)
 
-            speaker_dir = get_speaker_dir()
-            pt_path = os.path.join(speaker_dir, f"{speaker_preset}.pt")
-            if not os.path.isfile(pt_path):
-                raise FileNotFoundError(
-                    f"Speaker preset file not found: {pt_path}\n"
-                    f"Please run TS CosyVoice3 Save Speaker to create it."
-                )
+            # Load onto the device the model was actually loaded on — not "cuda if
+            # available": the user may have pinned the loader to CPU on a CUDA box.
+            load_device = model.get("device") or "cpu"
+            LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Loading preset '%s' onto %s", speaker_preset, load_device)
+            spk2info = load_speaker_preset(speaker_preset, device=load_device)
 
-            LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Loading preset from: %s", pt_path)
-            load_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            spk2info = torch.load(pt_path, map_location=load_device)
-            spk_id = next(iter(spk2info))
+            # Merges into the frontend's existing speaker table instead of replacing
+            # it: the model instance is shared through the module-level cache.
+            spk_id = inject_speaker_preset(cosyvoice_model, spk2info)
             LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Speaker ID: '%s'", spk_id)
-
-            cosyvoice_model.frontend.spk2info = spk2info
-            LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Injected spk2info into model frontend")
             pbar.update_absolute(1, 3)
 
             is_v3 = is_cosyvoice3_model_info(model)
@@ -242,8 +239,6 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
                 LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Combined %s chunks", len(all_speech))
 
             pbar.update_absolute(2, 3)
-            if waveform.device != torch.device("cpu"):
-                waveform = waveform.cpu()
 
             audio = tensor_to_comfyui_audio(waveform, sample_rate)
             duration = waveform.shape[-1] / sample_rate
@@ -258,4 +253,4 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
             return IO.NodeOutput(audio)
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 SpeakerInstruct2] ERROR", exc)
-            return IO.NodeOutput(build_empty_audio())
+            raise

@@ -10,6 +10,7 @@ tmp*/
 # Local-only AI/engineering notes (kept outside the public repo)
 CLAUDE.md
 MIGRATION_PLAN.md
+code-review-report.md
 
 # Dev-only — NOT published to GitHub. These live only in the dev
 # source-of-truth folder; the runtime copy pulls from GitHub and so

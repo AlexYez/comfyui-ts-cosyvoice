@@ -9,8 +9,6 @@ Public contract preserved:
 - inputs (optional): speaker_C_Audio, speaker_D_Audio, seed
 - outputs (in order): dialog_audio, speaker_a_audio, speaker_b_audio,
                       speaker_c_audio, speaker_d_audio, message
-The legacy print()-based logging is preserved verbatim from the V1 node to
-avoid behavioral drift; switching to the project logger is a separate cleanup.
 """
 
 from __future__ import annotations
@@ -18,8 +16,6 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any, Dict, List, Optional, Tuple
-
-import torch
 
 from comfy_api.v0_0_2 import IO
 
@@ -30,16 +26,32 @@ if parent_dir not in sys.path:
 
 try:
     from ..utils.ts_audio_utils import tensor_to_comfyui_audio, save_raw_audio_to_tempfile, cleanup_temp_file
-    from ..utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
-    from ..utils.ts_whisper_utils import is_cosyvoice3_model, transcribe_audio
+    from ..utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
+    from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
+    from ..utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from ..utils.ts_whisper_utils import transcribe_audio
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import tensor_to_comfyui_audio, save_raw_audio_to_tempfile, cleanup_temp_file
-    from utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
-    from utils.ts_whisper_utils import is_cosyvoice3_model, transcribe_audio
+    from utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
+    from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
+    from utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from utils.ts_whisper_utils import transcribe_audio
     from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
+
+
+LOGGER = get_logger("TS CosyVoice Dialog")
+
+MAX_SPEAKER_REFERENCE_SECONDS = 30.0
+
+
+def _format_prompt_for_model(text: str, is_v3: bool) -> str:
+    """Prefix the CosyVoice3 system prompt when the loaded model expects it."""
+    if is_v3:
+        return f"{SYSTEM_PROMPT}{END_OF_PROMPT}{text}"
+    return text
 
 
 def _validate_audio_duration(audio: Dict[str, Any], speaker_name: str) -> float:
@@ -48,11 +60,11 @@ def _validate_audio_duration(audio: Dict[str, Any], speaker_name: str) -> float:
     sample_rate = audio['sample_rate']
     duration = waveform.shape[-1] / sample_rate
 
-    if duration > 30:
+    if duration > MAX_SPEAKER_REFERENCE_SECONDS:
         raise ValueError(
             f"Speaker {speaker_name} reference audio is too long ({duration:.1f} seconds). "
-            f"CosyVoice only supports reference audio up to 30 seconds. "
-            f"Please trim your audio to 30 seconds or less. "
+            f"CosyVoice only supports reference audio up to {MAX_SPEAKER_REFERENCE_SECONDS:.0f} seconds. "
+            f"Please trim your audio to {MAX_SPEAKER_REFERENCE_SECONDS:.0f} seconds or less. "
             f"Recommended: 3-10 seconds for best quality."
         )
     return duration
@@ -82,18 +94,22 @@ def _prepare_speaker_data(
         temp_files[speaker_id] = temp_file
         temp_file_list.append(temp_file)
 
-        print(f"[TS CosyVoice3 Dialog] Transcribing Speaker {speaker_id} reference audio...")
+        LOGGER.info("[TS CosyVoice3 Dialog] Transcribing Speaker %s reference audio...", speaker_id)
         transcript = transcribe_audio(temp_file, "TS CosyVoice3 Dialog")
 
         if transcript:
-            if is_v3:
-                transcripts[speaker_id] = f"You are a helpful assistant.<|endofprompt|>{transcript}"
-            else:
-                transcripts[speaker_id] = transcript
-            print(f"[TS CosyVoice3 Dialog] Speaker {speaker_id} transcript: '{transcript[:50]}{'...' if len(transcript) > 50 else ''}'")
+            transcripts[speaker_id] = _format_prompt_for_model(transcript, is_v3)
+            LOGGER.info(
+                "[TS CosyVoice3 Dialog] Speaker %s transcript: '%s'",
+                speaker_id,
+                preview_text(transcript),
+            )
         else:
             transcripts[speaker_id] = None
-            print(f"[TS CosyVoice3 Dialog] Speaker {speaker_id}: No transcript (will use cross-lingual mode)")
+            LOGGER.info(
+                "[TS CosyVoice3 Dialog] Speaker %s: No transcript (will use cross-lingual mode)",
+                speaker_id,
+            )
 
     return temp_files, transcripts, temp_file_list
 
@@ -204,10 +220,13 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
         seed: int = 42,
     ) -> IO.NodeOutput:
         """Generate multi-speaker dialog audio."""
-        print(f"\n{'='*60}")
-        print(f"[TS CosyVoice3 Dialog] Starting dialog generation...")
-        print(f"[TS CosyVoice3 Dialog] Speed: {speed}x")
-        print(f"{'='*60}\n")
+        import torch
+
+        log_banner(
+            LOGGER,
+            "[TS CosyVoice3 Dialog] Starting dialog generation...",
+            Speed=f"{speed}x",
+        )
 
         temp_file_list: List[str] = []
 
@@ -217,9 +236,9 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             cosyvoice_model = model["model"]
             sample_rate = cosyvoice_model.sample_rate
 
-            is_v3 = model.get("is_cosyvoice3", False) or is_cosyvoice3_model(model)
+            is_v3 = is_cosyvoice3_model_info(model)
 
-            print(f"[TS CosyVoice3 Dialog] Validating speaker audio durations...")
+            LOGGER.info("[TS CosyVoice3 Dialog] Validating speaker audio durations...")
             _validate_audio_duration(speaker_A_Audio, "A")
             _validate_audio_duration(speaker_B_Audio, "B")
             if speaker_C_Audio is not None:
@@ -244,11 +263,14 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
                     if speaker_id in temp_files:
                         valid_lines.append((speaker_id, content))
                     else:
-                        print(f"[TS CosyVoice3 Dialog] Skipping line for Speaker {speaker_id}: no audio reference provided")
+                        LOGGER.warning(
+                            "[TS CosyVoice3 Dialog] Skipping line for Speaker %s: no audio reference provided",
+                            speaker_id,
+                        )
 
             if not valid_lines:
-                print(f"[TS CosyVoice3 Dialog] No valid dialog lines found!")
-                empty_audio = {"waveform": torch.zeros(1, 1, sample_rate), "sample_rate": sample_rate}
+                LOGGER.warning("[TS CosyVoice3 Dialog] No valid dialog lines found!")
+                empty_audio = build_empty_audio(sample_rate)
                 return IO.NodeOutput(
                     empty_audio, empty_audio, empty_audio, empty_audio, empty_audio,
                     "No valid dialog lines found. Use format: SPEAKER A: text",
@@ -262,7 +284,12 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             combined_waveforms: List[torch.Tensor] = []
 
             for i, (speaker_id, content) in enumerate(valid_lines):
-                print(f"[TS CosyVoice3 Dialog] Generating line {i+1}/{len(valid_lines)}: Speaker {speaker_id}")
+                LOGGER.info(
+                    "[TS CosyVoice3 Dialog] Generating line %s/%s: Speaker %s",
+                    i + 1,
+                    len(valid_lines),
+                    speaker_id,
+                )
 
                 temp_file = temp_files[speaker_id]
                 transcript = transcripts.get(speaker_id)
@@ -276,10 +303,7 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
                         speed=speed,
                     )
                 else:
-                    if is_v3:
-                        formatted_text = f"You are a helpful assistant.<|endofprompt|>{content}"
-                    else:
-                        formatted_text = content
+                    formatted_text = _format_prompt_for_model(content, is_v3)
 
                     output = cosyvoice_model.inference_cross_lingual(
                         tts_text=formatted_text,
@@ -325,28 +349,20 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             duration = combined_waveform.shape[-1] / sample_rate
             message = f"Dialog synthesized successfully! Duration: {duration:.2f}s, Lines: {len(valid_lines)}"
 
-            print(f"\n{'='*60}")
-            print(f"[TS CosyVoice3 Dialog] {message}")
-            print(f"[TS CosyVoice3 Dialog] Sample rate: {sample_rate} Hz")
-            print(f"{'='*60}\n")
+            log_banner(
+                LOGGER,
+                f"[TS CosyVoice3 Dialog] {message}",
+                SampleRate=f"{sample_rate} Hz",
+            )
 
             return IO.NodeOutput(
                 dialog_audio, speaker_a_audio, speaker_b_audio,
                 speaker_c_audio, speaker_d_audio, message,
             )
 
-        except Exception as e:
-            error_msg = f"Error generating dialog: {str(e)}"
-            print(f"\n{'='*60}")
-            print(f"[TS CosyVoice3 Dialog] ERROR: {error_msg}")
-            import traceback
-            traceback.print_exc()
-            print(f"{'='*60}\n")
-
-            empty_audio = {"waveform": torch.zeros(1, 1, 22050), "sample_rate": 22050}
-            return IO.NodeOutput(
-                empty_audio, empty_audio, empty_audio, empty_audio, empty_audio, error_msg,
-            )
+        except Exception as exc:
+            log_exception(LOGGER, "[TS CosyVoice3 Dialog] ERROR", exc)
+            raise
 
         finally:
             for temp_file in temp_file_list:

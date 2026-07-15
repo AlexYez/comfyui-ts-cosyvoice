@@ -15,8 +15,6 @@ import os
 import sys
 from typing import Any, Dict
 
-import torch
-
 from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +33,7 @@ try:
     )
     from ..utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
-    from ..utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from ..utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import (
@@ -48,7 +46,7 @@ except (ImportError, ValueError):
     )
     from utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
-    from utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
+    from utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
     from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
@@ -203,8 +201,6 @@ class TS_CosyVoice3_CrossLingual(IO.ComfyNode):
                 LOGGER.info("[TS CosyVoice3 CrossLingual] Combined %s chunks", len(all_speech))
 
             pbar.update_absolute(2, 3)
-            if waveform.device != torch.device("cpu"):
-                waveform = waveform.cpu()
 
             audio = tensor_to_comfyui_audio(waveform, sample_rate)
             duration = waveform.shape[-1] / sample_rate
@@ -219,6 +215,6 @@ class TS_CosyVoice3_CrossLingual(IO.ComfyNode):
             return IO.NodeOutput(audio)
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 CrossLingual] ERROR", exc)
-            return IO.NodeOutput(build_empty_audio())
+            raise
         finally:
             cleanup_temp_file(temp_file)

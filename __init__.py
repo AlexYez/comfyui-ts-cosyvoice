@@ -38,6 +38,10 @@ except ImportError:
     from nodes.ts_cosyvoice_speaker_text_to_voice_node import TS_CosyVoice3_SpeakerInstruct2
 
 
+# Single source of truth for the pack version at runtime. Kept in lockstep with
+# pyproject.toml by tests/test_version_consistency.py.
+__version__ = "0.9.0"
+
 _V3_NODES: list[type] = [
     TS_CosyVoice3_ModelLoader,
     TS_CosyVoice3_Instruct2,
@@ -58,6 +62,6 @@ async def comfy_entrypoint() -> ComfyExtension:
     return _PackExtension()
 
 
-get_logger("TS CosyVoice").info("TS CosyVoice3 Custom Nodes Loaded - Version 0.7.0")
+get_logger("TS CosyVoice").info("TS CosyVoice3 Custom Nodes Loaded - Version %s", __version__)
 
-__all__ = ["comfy_entrypoint"]
+__all__ = ["comfy_entrypoint", "__version__"]

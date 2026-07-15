@@ -47,8 +47,13 @@ MODEL_FILE_MIN_SIZES = {
 }
 
 
+_LOGGED_MODELS_DIR: str | None = None
+
+
 def get_models_directory() -> str:
     """Get the base models directory for CosyVoice models"""
+    global _LOGGED_MODELS_DIR
+
     # Try to get ComfyUI models directory
     try:
         import folder_paths
@@ -61,7 +66,11 @@ def get_models_directory() -> str:
     cosyvoice_dir = os.path.join(base_models_dir, "cosyvoice")
     os.makedirs(cosyvoice_dir, exist_ok=True)
 
-    LOGGER.info("[TS CosyVoice Model Manager] Models directory: %s", cosyvoice_dir)
+    # This helper is called from several places per load; log the resolved path once.
+    if _LOGGED_MODELS_DIR != cosyvoice_dir:
+        LOGGER.info("[TS CosyVoice Model Manager] Models directory: %s", cosyvoice_dir)
+        _LOGGED_MODELS_DIR = cosyvoice_dir
+
     return cosyvoice_dir
 
 
@@ -280,14 +289,6 @@ def download_model_huggingface(model_id: str, local_dir: str) -> str:
     except Exception as e:
         log_exception(LOGGER, "[TS CosyVoice Model Manager] HuggingFace download failed", e)
         raise
-
-
-def check_model_exists(model_dir: str, model_version: Optional[str] = None) -> bool:
-    """Check if model files exist in the directory"""
-    model_root = find_model_root(model_dir, model_version)
-    if model_root is None or model_version is None:
-        return model_root is not None
-    return validate_model_root(model_root, model_version) is None
 
 
 def get_model_path(
