@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-07-19
+
+Patch release: quality-audit follow-up. No node was renamed, no input/output was
+added, removed or reordered, and the speaker-preset and `COSYVOICE_MODEL` formats
+are unchanged — existing workflows and saved `.pt` presets keep working.
+
+### Fixed
+- **Speaker preset device (regression from 0.9.0).** `TS CosyVoice Speaker Text To
+  Voice` loaded the preset onto `model["device"]` — the *requested* device — which
+  the vendored runtime does not honour (it always runs on cuda-if-available). If
+  the loader was pinned to CPU on a CUDA box, preset tensors and model weights
+  landed on different devices and inference failed. The preset now loads onto the
+  device the model actually runs on (`frontend.device`), via a single
+  `get_runtime_device` helper.
+- **A malformed `configs/ts_emotion_presets.json` no longer breaks the pack.**
+  Emotion-preset options are read at import time; a JSON syntax error used to
+  propagate through node import and stop ComfyUI from registering any of the 7
+  nodes. Parsing now degrades to the built-in custom-instruction option with a
+  warning.
+- **Model cache no longer stores duplicate copies in VRAM.** The cache key hashed
+  the requested device string, so `auto` (→ `cuda:0`) and an explicit `cuda`
+  loaded and cached the same weights twice; likewise `fp16` on a CPU-only box
+  (silently downgraded to fp32) duplicated the fp32 model. The key now depends
+  only on what changes the loaded weights: model version and the effective fp16
+  flag.
+- **Temp WAV files no longer leak when writing fails.** `NamedTemporaryFile`
+  created the file before `soundfile.write`; a write error (full disk, bad array)
+  left an empty file with no path returned to clean it up. The temp file is now
+  removed on write failure.
+- **Dialog temp files are cleaned up on partial failure.** If preparing speaker
+  audio failed part-way through, temp files already written were leaked; the list
+  is now caller-owned so the node's `finally` always sees them.
+- **AUDIO with a batch of more than one clip is handled explicitly.** A `[B>1, C, T]`
+  input previously reached `soundfile` as a 3-D array and failed with a cryptic
+  error; the first clip is now used, with a debug log.
+- Exception chains preserved (`raise ... from`) in the model loader and downloader.
+- Cross-language synthesis no longer re-runs mono/resample on an already-prepared
+  reference (behaviour identical, one redundant pass removed).
+
+### Changed
+- The Model Loader `device` widget tooltip now states that device selection is
+  best-effort (the CosyVoice runtime places the model itself). `model["device"]`
+  now reports the actual runtime device rather than the requested one.
+
+### Internal
+- New helpers: `get_runtime_device` (adapter), `_drop_batch_dim` / `_write_temp_wav`
+  (audio utils).
+- Test suite grown to 147 (+ the earlier 131): emotion-preset resilience,
+  runtime-device resolution, model-cache keying and device recording, temp-file
+  cleanup on write failure, and batch-dim handling.
+
 ## [0.9.0] - 2026-07-15
 
 Quality release: no node was renamed, no input/output was added, removed or

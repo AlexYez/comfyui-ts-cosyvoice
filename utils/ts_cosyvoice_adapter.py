@@ -11,6 +11,25 @@ def is_cosyvoice3_model_info(model_info: dict[str, Any]) -> bool:
     return bool(model_info.get("is_cosyvoice3")) or "cosyvoice3" in version or "fun-cosyvoice3" in version
 
 
+def get_runtime_device(cosyvoice_model: Any) -> Any:
+    """
+    Return the device the loaded model actually runs on.
+
+    The vendored CosyVoice runtime hardcodes ``cuda`` when it is available and
+    ignores the loader's device request (``AutoModel`` does not accept a device
+    argument; ``frontend``/``model`` pin their own device). So the frontend's
+    ``device`` is the only truthful source for placing preset tensors and reading
+    the effective device — the loader's requested value can disagree with it.
+
+    Falls back to ``"cpu"`` if the attribute is unavailable.
+    """
+    frontend = getattr(cosyvoice_model, "frontend", None)
+    device = getattr(frontend, "device", None)
+    if device is not None:
+        return device
+    return "cpu"
+
+
 def format_instruct_text(instruct_text: str, is_cosyvoice3: bool) -> str:
     """Format instruct text according to the active CosyVoice generation API."""
     raw_instruct = instruct_text.strip()

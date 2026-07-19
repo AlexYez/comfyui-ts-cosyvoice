@@ -27,8 +27,8 @@ try:
         REFERENCE_AUDIO_MAX_SECONDS,
         REFERENCE_AUDIO_SAMPLE_RATE,
         cleanup_temp_file,
-        prepare_audio_for_cosyvoice,
         prepare_reference_audio_for_cosyvoice,
+        save_raw_audio_to_tempfile,
         tensor_to_comfyui_audio,
     )
     from ..utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
@@ -40,8 +40,8 @@ except (ImportError, ValueError):
         REFERENCE_AUDIO_MAX_SECONDS,
         REFERENCE_AUDIO_SAMPLE_RATE,
         cleanup_temp_file,
-        prepare_audio_for_cosyvoice,
         prepare_reference_audio_for_cosyvoice,
+        save_raw_audio_to_tempfile,
         tensor_to_comfyui_audio,
     )
     from utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
@@ -169,10 +169,10 @@ class TS_CosyVoice3_CrossLingual(IO.ComfyNode):
                 processed_ref_duration,
                 REFERENCE_AUDIO_SAMPLE_RATE,
             )
-            _, _, temp_file = prepare_audio_for_cosyvoice(
-                processed_reference_audio,
-                target_sample_rate=REFERENCE_AUDIO_SAMPLE_RATE,
-            )
+            # The reference is already mono / 24 kHz / trimmed from the call above,
+            # so write it straight to a temp file — the same path Instruct2 and
+            # SaveSpeaker take. Re-running mono/resample here would be a no-op.
+            temp_file = save_raw_audio_to_tempfile(processed_reference_audio)
 
             is_v3 = is_cosyvoice3_model_info(model)
             formatted_text = format_cross_lingual_text(text, is_v3, target_language)

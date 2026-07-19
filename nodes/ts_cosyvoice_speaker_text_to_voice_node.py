@@ -27,6 +27,7 @@ try:
     from ..utils.ts_cosyvoice_adapter import (
         apply_speaker_prompt_tokens,
         format_instruct_text,
+        get_runtime_device,
         is_cosyvoice3_model_info,
     )
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
@@ -47,7 +48,12 @@ try:
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
     from utils.ts_audio_utils import tensor_to_comfyui_audio
-    from utils.ts_cosyvoice_adapter import apply_speaker_prompt_tokens, format_instruct_text, is_cosyvoice3_model_info
+    from utils.ts_cosyvoice_adapter import (
+        apply_speaker_prompt_tokens,
+        format_instruct_text,
+        get_runtime_device,
+        is_cosyvoice3_model_info,
+    )
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
@@ -196,9 +202,11 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
             pbar = comfy.utils.ProgressBar(3)
             pbar.update_absolute(0, 3)
 
-            # Load onto the device the model was actually loaded on — not "cuda if
-            # available": the user may have pinned the loader to CPU on a CUDA box.
-            load_device = model.get("device") or "cpu"
+            # Load onto the device the model actually runs on. The loader's
+            # requested device can disagree with reality (the vendored runtime
+            # hardcodes cuda-if-available and ignores the request), so we read the
+            # frontend's own device rather than model["device"].
+            load_device = get_runtime_device(cosyvoice_model)
             LOGGER.info("[TS CosyVoice3 SpeakerInstruct2] Loading preset '%s' onto %s", speaker_preset, load_device)
             spk2info = load_speaker_preset(speaker_preset, device=load_device)
 

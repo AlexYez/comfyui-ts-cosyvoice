@@ -107,7 +107,9 @@ class TS_CosyVoice3_ModelLoader(IO.ComfyNode):
                     "device",
                     options=["auto", "cuda", "cpu", "mps"],
                     default="auto",
-                    tooltip="Устройство для загрузки и запуска модели; auto предпочитает GPU.",
+                    tooltip="Предпочитаемое устройство (best-effort). Рантайм CosyVoice "
+                            "сам размещает модель и использует GPU, если он доступен, "
+                            "поэтому выбор может не примениться дословно.",
                 ),
                 IO.Boolean.Input(
                     "fp16",
@@ -165,4 +167,4 @@ class TS_CosyVoice3_ModelLoader(IO.ComfyNode):
         except Exception as e:
             error_msg = f"Error loading model: {str(e)}"
             log_exception(LOGGER, "[TS CosyVoice Model Loader] ERROR", e)
-            raise RuntimeError(error_msg)
+            raise RuntimeError(error_msg) from e

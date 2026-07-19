@@ -118,9 +118,11 @@ def sanitize_speaker_name(speaker_name: str) -> str:
             f"Windows: {speaker_name!r}"
         )
 
-    if name.endswith((".", " ")):
+    # A trailing space is already impossible after strip() above; a trailing dot is
+    # not (strip removes whitespace, not dots) and is invalid on Windows.
+    if name.endswith("."):
         raise ValueError(
-            f"[TS CosyVoice3 Speaker IO] speaker_name must not end with a dot or space: "
+            f"[TS CosyVoice3 Speaker IO] speaker_name must not end with a dot: "
             f"{speaker_name!r}"
         )
 

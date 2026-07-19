@@ -36,6 +36,54 @@ def _require_soundfile():
     return sf
 
 
+def _drop_batch_dim(waveform: Any, context: str = "") -> Any:
+    """
+    Reduce a ``[B, C, T]`` AUDIO waveform to ``[C, T]``.
+
+    CosyVoice operates on a single clip. When ``B == 1`` this is a plain squeeze;
+    when ``B > 1`` we take the first item and log it, rather than leaving a 3-D
+    array that soundfile would later reject with a cryptic error. Non-3-D input is
+    returned unchanged.
+    """
+    if waveform.ndim != 3:
+        return waveform
+    if waveform.shape[0] > 1:
+        LOGGER.debug(
+            "[TS CosyVoice3 Audio Utils] %s received a batch of %d clips; using the first one.",
+            context or "audio",
+            int(waveform.shape[0]),
+        )
+        return waveform[0]
+    return waveform.squeeze(0)
+
+
+def _write_temp_wav(audio_np: Any, sample_rate: int, suffix: str = ".wav") -> str:
+    """
+    Write a numpy audio array to a fresh temp WAV, cleaning up on write failure.
+
+    ``NamedTemporaryFile(delete=False)`` leaves an empty file on disk the moment
+    it is created; if ``sf.write`` then fails (full disk, bad array) the caller
+    never receives a path to clean up, so the empty file would leak. We remove it
+    here and re-raise.
+    """
+    sf = _require_soundfile()
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    temp_path = temp_file.name
+    temp_file.close()
+
+    try:
+        sf.write(temp_path, audio_np, sample_rate)
+    except BaseException:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+    return temp_path
+
+
 def comfyui_audio_to_tensor(audio: Dict[str, Any]) -> Tuple[Any, int]:
     """
     Convert ComfyUI AUDIO format to tensor and sample rate
@@ -98,29 +146,19 @@ def save_audio_to_tempfile(waveform: Any, sample_rate: int, suffix: str = ".wav"
     """
     import torch
 
-    sf = _require_soundfile()
-
     # Ensure waveform is on CPU
     if waveform.device != torch.device('cpu'):
         waveform = waveform.cpu()
 
     # Remove batch dimension if present
-    if waveform.ndim == 3:
-        waveform = waveform.squeeze(0)
-
-    # Create temp file
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    temp_path = temp_file.name
-    temp_file.close()
+    waveform = _drop_batch_dim(waveform, "save_audio_to_tempfile")
 
     # Save audio using soundfile directly (avoids torchaudio's torchcodec requirement)
     # soundfile expects shape (samples, channels), so transpose from (channels, samples)
-    audio_np = waveform.cpu().numpy()
+    audio_np = waveform.numpy()
     if audio_np.ndim == 2:
         audio_np = audio_np.T  # (channels, samples) -> (samples, channels)
-    sf.write(temp_path, audio_np, sample_rate)
-
-    return temp_path
+    return _write_temp_wav(audio_np, sample_rate, suffix)
 
 
 def resample_audio(waveform: Any, orig_sample_rate: int, target_sample_rate: int) -> Any:
@@ -186,7 +224,7 @@ def prepare_reference_audio_for_cosyvoice(
     waveform, sample_rate = comfyui_audio_to_tensor(audio)
 
     if waveform.ndim == 3:
-        waveform = waveform.squeeze(0)
+        waveform = _drop_batch_dim(waveform, "prepare_reference_audio_for_cosyvoice")
     elif waveform.ndim == 1:
         waveform = waveform.unsqueeze(0)
 
@@ -226,8 +264,7 @@ def prepare_audio_for_cosyvoice(
     waveform, sample_rate = comfyui_audio_to_tensor(audio)
 
     # Remove batch dimension if present
-    if waveform.ndim == 3:
-        waveform = waveform.squeeze(0)
+    waveform = _drop_batch_dim(waveform, "prepare_audio_for_cosyvoice")
 
     # Convert to mono if needed
     if mono and waveform.shape[0] > 1:
@@ -259,31 +296,21 @@ def save_raw_audio_to_tempfile(audio: Dict[str, Any]) -> str:
     """
     import torch
 
-    sf = _require_soundfile()
-
     waveform = audio['waveform']
     sample_rate = audio['sample_rate']
 
     # Remove batch dim if present
-    if waveform.ndim == 3:
-        waveform = waveform.squeeze(0)
+    waveform = _drop_batch_dim(waveform, "save_raw_audio_to_tempfile")
 
     # Ensure CPU
     if waveform.device != torch.device('cpu'):
         waveform = waveform.cpu()
 
-    # Save directly without any processing
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
-    temp_path = temp_file.name
-    temp_file.close()
-
     # soundfile expects (samples, channels) format
     audio_np = waveform.numpy()
     if audio_np.ndim == 2:
         audio_np = audio_np.T  # (channels, samples) -> (samples, channels)
-    sf.write(temp_path, audio_np, sample_rate)
-
-    return temp_path
+    return _write_temp_wav(audio_np, sample_rate)
 
 
 def cleanup_temp_file(temp_path: Optional[str]) -> None:

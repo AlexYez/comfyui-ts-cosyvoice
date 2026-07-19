@@ -73,26 +73,30 @@ def _validate_audio_duration(audio: Dict[str, Any], speaker_name: str) -> float:
 def _prepare_speaker_data(
     speakers: Dict[str, Optional[Dict[str, Any]]],
     is_v3: bool,
-) -> Tuple[Dict[str, str], Dict[str, Optional[str]], List[str]]:
+    temp_file_list: List[str],
+) -> Tuple[Dict[str, str], Dict[str, Optional[str]]]:
     """
     Prepare speaker temp files and transcripts.
+
+    Every temp file is appended to the caller-owned ``temp_file_list`` the moment
+    it is created, so a failure part-way through (e.g. transcription raising after
+    two of four speakers were written) still leaves the caller's ``finally`` able
+    to clean up the files already on disk.
 
     Returns:
         temp_files: Dict mapping speaker ID to temp file path
         transcripts: Dict mapping speaker ID to formatted transcript (or None for cross-lingual fallback)
-        temp_file_list: List of temp file paths for cleanup
     """
     temp_files: Dict[str, str] = {}
     transcripts: Dict[str, Optional[str]] = {}
-    temp_file_list: List[str] = []
 
     for speaker_id, audio in speakers.items():
         if audio is None:
             continue
 
         temp_file = save_raw_audio_to_tempfile(audio)
-        temp_files[speaker_id] = temp_file
         temp_file_list.append(temp_file)
+        temp_files[speaker_id] = temp_file
 
         LOGGER.info("[TS CosyVoice3 Dialog] Transcribing Speaker %s reference audio...", speaker_id)
         transcript = transcribe_audio(temp_file, "TS CosyVoice3 Dialog")
@@ -111,7 +115,7 @@ def _prepare_speaker_data(
                 speaker_id,
             )
 
-    return temp_files, transcripts, temp_file_list
+    return temp_files, transcripts
 
 
 def _parse_dialog_line(line: str) -> Tuple[Optional[str], str]:
@@ -253,7 +257,7 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
                 "D": speaker_D_Audio,
             }
 
-            temp_files, transcripts, temp_file_list = _prepare_speaker_data(speakers, is_v3)
+            temp_files, transcripts = _prepare_speaker_data(speakers, is_v3, temp_file_list)
 
             lines = dialog_text.strip().splitlines()
             valid_lines: List[Tuple[str, str]] = []

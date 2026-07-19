@@ -12,8 +12,10 @@ import torch
 
 try:
     from .ts_logging import get_logger, log_banner, log_exception
+    from .ts_cosyvoice_adapter import get_runtime_device
 except (ImportError, ValueError):
     from ts_logging import get_logger, log_banner, log_exception
+    from ts_cosyvoice_adapter import get_runtime_device
 
 # Global model cache
 _MODEL_CACHE = {}
@@ -358,7 +360,9 @@ def get_model_path(
             return _download_from_source(alternate_source)
 
         except Exception as e2:
-            raise RuntimeError(f"Failed to download model from both sources. Last error: {str(e2)}")
+            raise RuntimeError(
+                f"Failed to download model from both sources. Last error: {str(e2)}"
+            ) from e2
 
 
 def load_cosyvoice_model(
@@ -438,7 +442,14 @@ def get_cached_model(
     Returns:
         Dictionary containing model and metadata
     """
-    cache_key = f"{model_version}_{device}_fp16_{int(fp16)}"
+    # The vendored runtime ignores the requested device (it always loads on
+    # cuda-if-available) and downgrades fp16 to fp32 when CUDA is absent. So the
+    # cache key must key only on what actually changes the loaded weights:
+    # the model version and the *effective* fp16 flag. Keying on the requested
+    # device string would store several identical models under different keys
+    # (e.g. "auto" -> cuda:0 vs "cuda" -> cuda), doubling VRAM.
+    effective_fp16 = bool(fp16) and torch.cuda.is_available()
+    cache_key = f"{model_version}_fp16_{int(effective_fp16)}"
 
     # Check cache
     if cache_key in _MODEL_CACHE:
@@ -456,13 +467,17 @@ def get_cached_model(
     is_cosyvoice3 = "cosyvoice3" in version_lower or "fun-cosyvoice3" in version_lower
     is_cosyvoice2 = False
 
+    # Record the device the model actually runs on, not the requested one — the
+    # runtime pins its own device and the request is best-effort (see loader).
+    actual_device = get_runtime_device(model)
+
     # Create model info dict
     model_info = {
         "model": model,
         "model_name": model_version,
         "model_version": model_version,
         "model_path": model_path,
-        "device": device,
+        "device": actual_device,
         "fp16": fp16,
         "sample_rate": model.sample_rate,  # Use actual model sample rate (24000 for v2/v3, 22050 for v1)
         "is_cosyvoice3": is_cosyvoice3,

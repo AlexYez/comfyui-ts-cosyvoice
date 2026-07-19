@@ -40,7 +40,7 @@ except ImportError:
 
 # Single source of truth for the pack version at runtime. Kept in lockstep with
 # pyproject.toml by tests/test_version_consistency.py.
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 _V3_NODES: list[type] = [
     TS_CosyVoice3_ModelLoader,

@@ -18,8 +18,15 @@ import random
 from functools import lru_cache
 from typing import Any, Iterable
 
+try:
+    from .ts_logging import get_logger
+except (ImportError, ValueError):
+    from ts_logging import get_logger
+
 
 CUSTOM_INSTRUCTION_LABEL = "Ваша инструкция"
+
+LOGGER = get_logger("TS CosyVoice3 Node Utils")
 
 
 def set_seed(seed: int) -> None:
@@ -67,8 +74,30 @@ def _load_emotion_presets_cached(path: str, mtime_ns: int) -> dict[str, str]:
     del mtime_ns
 
     presets: dict[str, str] = {CUSTOM_INSTRUCTION_LABEL: ""}
-    with open(path, "r", encoding="utf-8") as handle:
-        payload = json.load(handle)
+
+    # This file is user-editable, and the emotion preset options are read at pack
+    # import time. A malformed JSON must not raise here: a bare parse error would
+    # propagate through the node module import and stop ComfyUI from registering
+    # any node of the pack. Degrade to the built-in custom-instruction option.
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError) as exc:  # ValueError covers json.JSONDecodeError
+        LOGGER.warning(
+            "[TS CosyVoice3 Node Utils] Could not read emotion presets from %s: %s. "
+            "Falling back to the custom-instruction option only.",
+            path,
+            exc,
+        )
+        return presets
+
+    if not isinstance(payload, dict):
+        LOGGER.warning(
+            "[TS CosyVoice3 Node Utils] Emotion preset file %s is not a JSON object; "
+            "falling back to the custom-instruction option only.",
+            path,
+        )
+        return presets
 
     preset_items = payload.get("presets", [])
     if not isinstance(preset_items, list):
@@ -102,12 +131,14 @@ def resolve_instruct_text(instruct_text: str, emotion_preset: str) -> str:
     return load_emotion_presets().get(emotion_preset, "")
 
 
-def build_empty_audio(sample_rate: int = 22050) -> dict[str, Any]:
+def build_empty_audio(sample_rate: int) -> dict[str, Any]:
     """
     Return a silent AUDIO payload of one second at the given sample rate.
 
     Used for the graceful "nothing to synthesize" paths (e.g. a dialog with no
-    parseable lines). Genuine failures raise instead of returning silence.
+    parseable lines). Callers pass the model's own sample rate so the silence
+    matches the rate other outputs use; genuine failures raise instead of
+    returning silence.
     """
     import torch
 
