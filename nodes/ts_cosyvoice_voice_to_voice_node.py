@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import os
 import sys
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from comfy_api.v0_0_2 import IO
 
@@ -40,10 +40,13 @@ try:
         resample_audio,
         tensor_to_comfyui_audio,
     )
+    from ..utils.ts_fingerprint import seed_fingerprint
+    from ..utils.ts_interrupt import raise_if_interrupted
     from ..utils.ts_logging import get_logger, log_banner, log_exception
     from ..utils.ts_node_utils import set_seed
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
+    from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_utils import (
         cleanup_temp_file,
         ensure_mono,
@@ -51,12 +54,12 @@ except (ImportError, ValueError):
         resample_audio,
         tensor_to_comfyui_audio,
     )
+    from utils.ts_fingerprint import seed_fingerprint
+    from utils.ts_interrupt import raise_if_interrupted
     from utils.ts_logging import get_logger, log_banner, log_exception
     from utils.ts_node_utils import set_seed
-    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Voice To Voice")
 
@@ -110,7 +113,7 @@ def _get_pitch_shift_fft_size(sample_rate: int, num_samples: int) -> int:
 
     preferred_fft = 2048 if sample_rate >= 24000 else 1024
     max_fft = max(256, min(preferred_fft, num_samples))
-    return max(256, 2 ** int(math.floor(math.log2(max_fft))))
+    return max(256, 2 ** math.floor(math.log2(max_fft)))
 
 
 def _prepare_source_audio_for_pitch_shift(audio: Dict[str, Any], target_sample_rate: int) -> Dict[str, Any]:
@@ -301,8 +304,8 @@ def _split_source_audio_into_chunks(audio: Dict[str, Any]) -> List[Dict[str, Any
 
         latest_end = min(start + max_chunk_samples, total_samples)
         earliest_end = min(latest_end, start + min_chunk_samples)
-        split_point: Optional[int] = None
-        best_distance: Optional[int] = None
+        split_point: int | None = None
+        best_distance: int | None = None
         for silence_start, silence_end in silence_intervals:
             overlap_start = max(silence_start, earliest_end)
             overlap_end = min(silence_end, latest_end)
@@ -345,6 +348,7 @@ def _collect_inference_output(
 
     speech_parts: List[torch.Tensor] = []
     for model_chunk in output:
+        raise_if_interrupted()
         speech_parts.append(model_chunk["tts_speech"])
 
     if not speech_parts:
@@ -450,7 +454,13 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
         )
+
+    @classmethod
+    def fingerprint_inputs(cls, seed: int = 42, **kwargs) -> Any:
+        """Make seed=-1 mean what its tooltip says: a new take on every run."""
+        return seed_fingerprint(seed)
 
     @classmethod
     def execute(
@@ -540,6 +550,10 @@ class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):
 
             converted_chunks: List[Any] = []
             for chunk_index, source_chunk in enumerate(source_chunks, start=1):
+                # Cancel between chunks: a long source can be dozens of chunks and
+                # hours of work, so this is the difference between Cancel meaning
+                # something and meaning nothing.
+                raise_if_interrupted()
                 chunk_duration = _extract_waveform(source_chunk).shape[-1] / source_chunk["sample_rate"]
                 source_temp = None
                 LOGGER.info(

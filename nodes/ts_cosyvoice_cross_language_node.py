@@ -32,10 +32,12 @@ try:
         tensor_to_comfyui_audio,
     )
     from ..utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
+    from ..utils.ts_fingerprint import seed_fingerprint
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
+    from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_utils import (
         REFERENCE_AUDIO_MAX_SECONDS,
         REFERENCE_AUDIO_SAMPLE_RATE,
@@ -45,12 +47,11 @@ except (ImportError, ValueError):
         tensor_to_comfyui_audio,
     )
     from utils.ts_cosyvoice_adapter import format_cross_lingual_text, is_cosyvoice3_model_info
+    from utils.ts_fingerprint import seed_fingerprint
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import collect_speech_chunks, merge_speech_chunks, set_seed
-    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Cross Language")
 
@@ -119,7 +120,13 @@ class TS_CosyVoice3_CrossLingual(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
         )
+
+    @classmethod
+    def fingerprint_inputs(cls, seed: int = 42, **kwargs) -> Any:
+        """Make seed=-1 mean what its tooltip says: a new take on every run."""
+        return seed_fingerprint(seed)
 
     @classmethod
     def execute(

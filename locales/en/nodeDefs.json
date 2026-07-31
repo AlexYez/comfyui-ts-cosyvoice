@@ -1,0 +1,222 @@
+{
+  "TS_CosyVoice3_CrossLingual": {
+    "description": "Cross-language speech synthesis: keep the reference timbre, switch the language.",
+    "inputs": {
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "reference_audio": {
+        "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
+      },
+      "seed": {
+        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+      },
+      "speed": {
+        "tooltip": "Playback speed multiplier applied to the generated speech."
+      },
+      "target_language": {
+        "tooltip": "Target language of the text. auto lets the model infer it, which is usually right for unambiguous text."
+      },
+      "text": {
+        "tooltip": "The text to speak, written in the target language."
+      },
+      "text_normalize": {
+        "tooltip": "Run CosyVoice's text frontend (number and abbreviation expansion). Turn it off when you feed CMU phonemes or special tags that must survive verbatim."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The generated speech, at the model's own sample rate (24 kHz)."
+      }
+    }
+  },
+  "TS_CosyVoice3_Dialog": {
+    "description": "Multi-speaker dialog synthesis with voice cloning (SPEAKER A: ... SPEAKER B: ...).",
+    "inputs": {
+      "dialog_text": {
+        "tooltip": "The script, one line per turn, each prefixed with SPEAKER A:, SPEAKER B:, SPEAKER C: or SPEAKER D:. Lines without a recognised prefix, and lines for a speaker with no reference audio, are skipped."
+      },
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "seed": {
+        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+      },
+      "speaker_A_Audio": {
+        "tooltip": "Reference voice for SPEAKER A. 3-10 seconds works best; 30 seconds is the hard limit."
+      },
+      "speaker_B_Audio": {
+        "tooltip": "Reference voice for SPEAKER B. 3-10 seconds works best; 30 seconds is the hard limit."
+      },
+      "speaker_C_Audio": {
+        "tooltip": "Optional reference voice for SPEAKER C."
+      },
+      "speaker_D_Audio": {
+        "tooltip": "Optional reference voice for SPEAKER D."
+      },
+      "speed": {
+        "tooltip": "Playback speed multiplier applied to every line of the dialog."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The full conversation, lines concatenated in script order."
+      },
+      "1": {
+        "tooltip": "SPEAKER A alone, silent where the others speak — same length as dialog_audio, so the tracks line up."
+      },
+      "2": {
+        "tooltip": "SPEAKER B alone, silent where the others speak."
+      },
+      "3": {
+        "tooltip": "SPEAKER C alone; all silence when C never speaks."
+      },
+      "4": {
+        "tooltip": "SPEAKER D alone; all silence when D never speaks."
+      },
+      "5": {
+        "tooltip": "Short report: duration, number of lines rendered, and any lines that were skipped."
+      }
+    }
+  },
+  "TS_CosyVoice3_Instruct2": {
+    "description": "Generate speech with reference timbre and instruction-guided emotion.",
+    "inputs": {
+      "emotion_preset": {
+        "tooltip": "Ready-made delivery preset, read from configs/ts_emotion_presets.json. Pick the custom entry to use the instruct_text field instead."
+      },
+      "instruct_text": {
+        "tooltip": "Free-form instruction describing emotion and delivery. Only used when emotion_preset is set to the custom entry."
+      },
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "reference_audio": {
+        "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
+      },
+      "seed": {
+        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+      },
+      "speed": {
+        "tooltip": "Playback speed multiplier applied to the generated speech."
+      },
+      "text": {
+        "tooltip": "The text to speak in the reference voice."
+      },
+      "text_normalize": {
+        "tooltip": "Run CosyVoice's text frontend (number and abbreviation expansion). Turn it off when you feed CMU phonemes or special tags that must survive verbatim."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The generated speech, at the model's own sample rate (24 kHz)."
+      }
+    }
+  },
+  "TS_CosyVoice3_ModelLoader": {
+    "description": "Load a CosyVoice model with automatic download and caching.",
+    "inputs": {
+      "device": {
+        "tooltip": "Preferred compute device, best effort. The CosyVoice runtime places the model itself and uses the GPU when one is available, so this request may not be honoured literally."
+      },
+      "download_source": {
+        "tooltip": "Where to download the weights from on first use. If the chosen source fails, the other one is tried automatically."
+      },
+      "fp16": {
+        "tooltip": "Load in half precision on supported accelerators to cut VRAM use. Ignored without CUDA."
+      },
+      "model_version": {
+        "tooltip": "Which CosyVoice model to load."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The loaded model, to be wired into the pack's synthesis nodes."
+      }
+    }
+  },
+  "TS_CosyVoice3_SaveSpeaker": {
+    "description": "Extract zero-shot speaker features from reference audio and save as a .pt preset.",
+    "inputs": {
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "reference_audio": {
+        "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
+      },
+      "reference_text": {
+        "tooltip": "What is actually said in the reference audio. Leave it empty to have Whisper transcribe it automatically — an accurate transcript noticeably improves the clone."
+      },
+      "speaker_name": {
+        "tooltip": "File name for the preset, without extension. Must be a plain name: no slashes, no '..', none of < > : \" / \\ | ? *."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "Absolute path the preset was written to."
+      }
+    }
+  },
+  "TS_CosyVoice3_SpeakerInstruct2": {
+    "description": "Synthesize speech using a saved speaker preset (.pt) and an emotion instruction.",
+    "inputs": {
+      "emotion_preset": {
+        "tooltip": "Ready-made delivery preset, read from configs/ts_emotion_presets.json. Pick the custom entry to use the instruct_text field instead."
+      },
+      "instruct_text": {
+        "tooltip": "Free-form instruction describing emotion and delivery. Only used when emotion_preset is set to the custom entry."
+      },
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "seed": {
+        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+      },
+      "speaker_preset": {
+        "tooltip": "A voice preset saved earlier by TS CosyVoice Save Speaker, read from ComfyUI/models/cosyvoice/speaker/."
+      },
+      "speed": {
+        "tooltip": "Playback speed multiplier applied to the generated speech."
+      },
+      "text": {
+        "tooltip": "The text to speak in the saved voice."
+      },
+      "text_normalize": {
+        "tooltip": "Run CosyVoice's text frontend (number and abbreviation expansion). Turn it off when you feed CMU phonemes or special tags that must survive verbatim."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The generated speech, at the model's own sample rate (24 kHz)."
+      }
+    }
+  },
+  "TS_CosyVoice3_VoiceConversion": {
+    "description": "Convert source audio to sound like the target voice (voice-to-voice).",
+    "inputs": {
+      "model": {
+        "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "pitch_shift_semitones": {
+        "tooltip": "Shift the source pitch before conversion. Useful when source and target sit in different registers — try -12 or +12 when converting between a low and a high voice."
+      },
+      "seed": {
+        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+      },
+      "source_audio": {
+        "tooltip": "The performance to re-voice. Timing and delivery are kept; only the timbre changes. Long audio is processed in chunks."
+      },
+      "speed": {
+        "tooltip": "Playback speed multiplier applied to the generated speech."
+      },
+      "target_audio": {
+        "tooltip": "The voice to sound like. Trimmed to 30 seconds and converted to the model's format."
+      }
+    },
+    "outputs": {
+      "0": {
+        "tooltip": "The re-voiced audio, at the model's own sample rate (24 kHz)."
+      }
+    }
+  }
+}

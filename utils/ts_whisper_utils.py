@@ -1,13 +1,22 @@
 """
 Whisper auto-transcription helpers for TS CosyVoice3.
 
-Whisper is optional: if it is missing or transcription fails, the callers fall back
-to an empty reference text rather than failing the node (§9).
+Whisper is optional: if it is missing or transcription fails, callers fall back
+to an empty reference text rather than failing the node (§9). What changed is
+that the failure is no longer silent — ``transcribe_audio_with_status`` hands the
+reason back so a node can tell the user their preset was saved with a degraded
+(empty) transcript instead of only whispering it into the log.
+
+Transcripts are cached by audio *content*, not by path: every caller writes the
+reference to a fresh temp file, so a path-keyed cache would never hit. The Dialog
+node transcribes up to four references, and without this it re-transcribed all of
+them on every single run even though the references had not changed.
 
 Model-family detection lives in `ts_cosyvoice_adapter.is_cosyvoice3_model_info` —
 this module used to carry a second, subtly different copy of it.
 """
 
+import hashlib
 import os
 
 try:
@@ -18,6 +27,13 @@ except (ImportError, ValueError):
 
 _WHISPER_MODEL = None
 LOGGER = get_logger("TS CosyVoice3 Whisper")
+
+# Content hash -> transcript. Bounded because a long session can transcribe many
+# different references; the reference clips themselves are never held here.
+_TRANSCRIPT_CACHE: "dict[str, str]" = {}
+_TRANSCRIPT_CACHE_LIMIT = 64
+
+_READ_BLOCK_SIZE = 1 << 20
 
 
 def get_whisper_download_dir() -> str:
@@ -43,17 +59,69 @@ def get_whisper_model(log_prefix: str):
     return _WHISPER_MODEL
 
 
-def transcribe_audio(audio_path: str, log_prefix: str) -> str:
+def _audio_content_key(audio_path: str) -> "str | None":
+    """Hash the audio bytes; returns None when the file cannot be read."""
+    digest = hashlib.sha256()
     try:
-        model = get_whisper_model(log_prefix)
-        if model is None:
-            return ""
+        with open(audio_path, "rb") as handle:
+            for block in iter(lambda: handle.read(_READ_BLOCK_SIZE), b""):
+                digest.update(block)
+    except OSError as e:
+        LOGGER.debug("[TS CosyVoice3 Whisper] Could not hash %s: %s", os.path.basename(audio_path), e)
+        return None
+    return digest.hexdigest()
 
+
+def _remember(content_key: "str | None", transcript: str) -> None:
+    if not content_key or not transcript:
+        return
+    if len(_TRANSCRIPT_CACHE) >= _TRANSCRIPT_CACHE_LIMIT:
+        _TRANSCRIPT_CACHE.pop(next(iter(_TRANSCRIPT_CACHE)))
+    _TRANSCRIPT_CACHE[content_key] = transcript
+
+
+def transcribe_audio_with_status(audio_path: str, log_prefix: str) -> "tuple[str, str | None]":
+    """
+    Transcribe reference audio.
+
+    Returns:
+        ``(transcript, failure_reason)``. ``failure_reason`` is None on success;
+        otherwise it is a short, user-facing explanation of why the transcript is
+        empty, so the calling node can surface it instead of silently saving a
+        weaker preset.
+    """
+    content_key = _audio_content_key(audio_path)
+    if content_key is not None:
+        cached = _TRANSCRIPT_CACHE.get(content_key)
+        if cached is not None:
+            LOGGER.info("[%s] Reusing cached transcript for identical reference audio", log_prefix)
+            return cached, None
+
+    model = get_whisper_model(log_prefix)
+    if model is None:
+        return "", (
+            "Whisper is not available, so the reference text could not be transcribed "
+            "automatically. Install it with: pip install openai-whisper"
+        )
+
+    try:
         result = model.transcribe(audio_path, language=None)
-        transcript = result["text"].strip()
-        detected_lang = result.get("language", "unknown")
-        LOGGER.info("[%s] Whisper detected language: %s", log_prefix, detected_lang)
-        return transcript
     except Exception as e:
         LOGGER.error("[%s] Whisper transcription failed: %s", log_prefix, e)
-        return ""
+        return "", f"Whisper transcription failed: {e}"
+
+    transcript = str(result.get("text", "")).strip()
+    detected_lang = result.get("language", "unknown")
+    LOGGER.info("[%s] Whisper detected language: %s", log_prefix, detected_lang)
+
+    if not transcript:
+        return "", "Whisper produced an empty transcript for this reference audio."
+
+    _remember(content_key, transcript)
+    return transcript, None
+
+
+def transcribe_audio(audio_path: str, log_prefix: str) -> str:
+    """Transcribe reference audio, returning an empty string on any failure."""
+    transcript, _ = transcribe_audio_with_status(audio_path, log_prefix)
+    return transcript

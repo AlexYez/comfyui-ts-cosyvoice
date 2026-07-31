@@ -32,6 +32,7 @@ try:
         tensor_to_comfyui_audio,
     )
     from ..utils.ts_cosyvoice_adapter import format_instruct_text, is_cosyvoice3_model_info
+    from ..utils.ts_fingerprint import seed_fingerprint
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
@@ -43,6 +44,7 @@ try:
     )
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
+    from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_utils import (
         REFERENCE_AUDIO_MAX_SECONDS,
         REFERENCE_AUDIO_SAMPLE_RATE,
@@ -52,6 +54,7 @@ except (ImportError, ValueError):
         tensor_to_comfyui_audio,
     )
     from utils.ts_cosyvoice_adapter import format_instruct_text, is_cosyvoice3_model_info
+    from utils.ts_fingerprint import seed_fingerprint
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
@@ -61,10 +64,8 @@ except (ImportError, ValueError):
         resolve_instruct_text,
         set_seed,
     )
-    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Text to Voice")
 # Widget options are read once at schema build time (ComfyUI caches the schema);
@@ -144,7 +145,13 @@ class TS_CosyVoice3_Instruct2(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
         )
+
+    @classmethod
+    def fingerprint_inputs(cls, seed: int = 42, **kwargs) -> Any:
+        """Make seed=-1 mean what its tooltip says: a new take on every run."""
+        return seed_fingerprint(seed)
 
     @classmethod
     def execute(

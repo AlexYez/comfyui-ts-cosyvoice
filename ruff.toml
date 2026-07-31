@@ -1,0 +1,59 @@
+# Lint config for the pack's own code only.
+#
+# Deliberately NOT in pyproject.toml: the publish workflow triggers on any push
+# that touches pyproject.toml, so putting tool config there would fire a release
+# attempt on a lint-config edit.
+#
+# `cosyvoice/`, `matcha/` and `configs/` are vendored upstream (Alibaba
+# CosyVoice, Matcha-TTS). Linting or formatting them would balloon the diff
+# against upstream and make future merges painful, so they are excluded here as
+# well as being off-limits by policy.
+
+line-length = 120
+target-version = "py310"
+
+extend-exclude = [
+    "cosyvoice",
+    "matcha",
+    "configs",
+    "tmp_pytest",
+    "web",
+    "locales",
+]
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "W",      # pycodestyle warnings
+    "I",      # import sorting
+    "B",      # bugbear
+    "UP",     # pyupgrade
+    "T20",    # flake8-print: logging only, never print()
+    "RUF",
+]
+ignore = [
+    "E501",   # line length is enforced by the formatter, not the linter
+    "B008",   # function call in default argument: not a pattern this pack uses
+    "UP006",  # Dict/List in annotations: kept for consistency with existing code
+    "UP035",  # ditto
+    "RUF001", # ambiguous unicode: tooltips and docs are deliberately Cyrillic
+    "RUF002",
+    "RUF003",
+]
+
+[lint.per-file-ignores]
+# Node modules re-import the same names through a relative/absolute try-except
+# pair so the pack loads both as a package and as a top-level module.
+# E402: every node module inserts the pack root on sys.path before importing
+# `comfy.utils` and the vendored `cosyvoice` package, which are only resolvable
+# afterwards. The import genuinely cannot move to the top of the file.
+"nodes/*.py" = ["F811", "E402"]
+"utils/*.py" = ["F811"]
+"__init__.py" = ["E402", "F401", "F811"]
+# Tests import fixtures after an importorskip guard on purpose.
+"tests/*.py" = ["E402"]
+"tests/**/*.py" = ["E402"]
+# The doc generator is a command-line script; its progress output belongs on
+# stdout, not in the ComfyUI log.
+"tools/generate_node_docs.py" = ["T201"]

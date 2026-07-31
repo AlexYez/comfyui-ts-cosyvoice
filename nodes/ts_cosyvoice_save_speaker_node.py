@@ -15,7 +15,7 @@ import os
 import sys
 from typing import Any, Dict
 
-from comfy_api.v0_0_2 import IO
+from comfy_api.v0_0_2 import IO, UI
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -30,12 +30,13 @@ try:
         prepare_reference_audio_for_cosyvoice,
         save_raw_audio_to_tempfile,
     )
-    from ..utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
+    from ..utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_speaker_io import sanitize_speaker_name, save_speaker_preset
-    from ..utils.ts_whisper_utils import transcribe_audio
+    from ..utils.ts_whisper_utils import transcribe_audio_with_status
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
+    from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_utils import (
         REFERENCE_AUDIO_MAX_SECONDS,
         REFERENCE_AUDIO_SAMPLE_RATE,
@@ -43,14 +44,12 @@ except (ImportError, ValueError):
         prepare_reference_audio_for_cosyvoice,
         save_raw_audio_to_tempfile,
     )
-    from utils.ts_cosyvoice_adapter import SYSTEM_PROMPT, END_OF_PROMPT, is_cosyvoice3_model_info
+    from utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_speaker_io import sanitize_speaker_name, save_speaker_preset
-    from utils.ts_whisper_utils import transcribe_audio
-    from nodes._v3_types import CosyVoiceModel
+    from utils.ts_whisper_utils import transcribe_audio_with_status
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Save Speaker")
 
@@ -96,7 +95,28 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=True,
+            essentials_category="Audio",
         )
+
+    @classmethod
+    def validate_inputs(cls, speaker_name):
+        """
+        Reject an unusable preset name before the graph runs.
+
+        Without this the name is only checked inside execute(), i.e. after the
+        model loader has already spent time loading 1.5 GB of weights, just to
+        fail on a typo the frontend could have flagged immediately.
+
+        Deliberately declared without **kwargs: ComfyUI skips its own min/max and
+        combo-membership checks for every input once a validator accepts kwargs
+        (execution.py), and naming only this parameter keeps the built-in
+        validation intact for the rest.
+        """
+        try:
+            sanitize_speaker_name(speaker_name)
+        except ValueError as exc:
+            return str(exc)
+        return True
 
     @classmethod
     def execute(
@@ -146,14 +166,18 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
             pbar.update_absolute(1, 3)
 
             cosyvoice_model = model["model"]
+            transcription_warning: str | None = None
             if not reference_text.strip():
                 LOGGER.info("[TS CosyVoice3 SaveSpeaker] No reference_text provided, auto-transcribing with Whisper...")
-                reference_text = transcribe_audio(temp_file, "TS CosyVoice3 SaveSpeaker")
+                reference_text, transcription_warning = transcribe_audio_with_status(
+                    temp_file, "TS CosyVoice3 SaveSpeaker"
+                )
                 if reference_text:
                     LOGGER.info("[TS CosyVoice3 SaveSpeaker] Transcribed: '%s'", preview_text(reference_text, 80))
                 else:
                     LOGGER.warning(
-                        "[TS CosyVoice3 SaveSpeaker] Transcription failed, using empty reference_text"
+                        "[TS CosyVoice3 SaveSpeaker] %s Saving preset with an empty reference text.",
+                        transcription_warning,
                     )
 
             prompt_text = reference_text
@@ -181,7 +205,19 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
                 SpeakerKey=speaker_name,
                 Keys=", ".join(model_input.keys()),
             )
-            return IO.NodeOutput(save_path)
+
+            # saved_path stays a plain path — it is a public output others may
+            # consume. The degraded-save warning goes to the node body instead,
+            # where it is actually visible; previously it only reached the log.
+            status = f"Saved speaker preset '{speaker_name}'."
+            if transcription_warning:
+                status += (
+                    f"\n\nWarning: {transcription_warning}"
+                    f"\nThe preset was saved with an empty reference text, which clones"
+                    f" noticeably worse. Fill in reference_text by hand and save again"
+                    f" for a better result."
+                )
+            return IO.NodeOutput(save_path, ui=UI.PreviewText(status))
         except Exception as exc:
             log_exception(LOGGER, "[TS CosyVoice3 SaveSpeaker] ERROR", exc)
             raise RuntimeError(f"Error saving speaker preset: {exc}") from exc

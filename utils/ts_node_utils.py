@@ -19,8 +19,10 @@ from functools import lru_cache
 from typing import Any, Iterable
 
 try:
+    from .ts_interrupt import raise_if_interrupted
     from .ts_logging import get_logger
 except (ImportError, ValueError):
+    from ts_interrupt import raise_if_interrupted
     from ts_logging import get_logger
 
 
@@ -43,9 +45,17 @@ def set_seed(seed: int) -> None:
 
 
 def collect_speech_chunks(output: Iterable[dict[str, Any]]) -> list[Any]:
-    """Collect generated speech tensors from a CosyVoice iterator."""
+    """
+    Collect generated speech tensors from a CosyVoice iterator.
+
+    The iterator drives the actual generation, so draining it is where a
+    synthesis node spends nearly all of its time. Checking for cancellation
+    between chunks is what makes Cancel work for every text-to-speech node in the
+    pack; without it the flag is only read after the node has already finished.
+    """
     chunks: list[Any] = []
     for chunk in output:
+        raise_if_interrupted()
         speech = chunk.get("tts_speech")
         if speech is not None:
             chunks.append(speech)
@@ -80,7 +90,7 @@ def _load_emotion_presets_cached(path: str, mtime_ns: int) -> dict[str, str]:
     # propagate through the node module import and stop ComfyUI from registering
     # any node of the pack. Degrade to the built-in custom-instruction option.
     try:
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, encoding="utf-8") as handle:
             payload = json.load(handle)
     except (OSError, ValueError) as exc:  # ValueError covers json.JSONDecodeError
         LOGGER.warning(

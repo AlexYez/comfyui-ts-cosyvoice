@@ -10,7 +10,7 @@ prevent ComfyUI from registering any node of the pack.
 
 import os
 import tempfile
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 
 try:
     from .ts_logging import get_logger
@@ -249,7 +249,7 @@ def prepare_audio_for_cosyvoice(
     audio: Dict[str, Any],
     target_sample_rate: int = 16000,
     mono: bool = True
-) -> Tuple[Any, int, Optional[str]]:
+) -> Tuple[Any, int, str | None]:
     """
     Prepare ComfyUI audio for CosyVoice inference
 
@@ -313,7 +313,7 @@ def save_raw_audio_to_tempfile(audio: Dict[str, Any]) -> str:
     return _write_temp_wav(audio_np, sample_rate)
 
 
-def cleanup_temp_file(temp_path: Optional[str]) -> None:
+def cleanup_temp_file(temp_path: str | None) -> None:
     """
     Clean up temporary audio file
 

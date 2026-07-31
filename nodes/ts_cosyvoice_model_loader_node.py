@@ -19,7 +19,6 @@ import sys
 from typing import Any, Dict
 
 import torch
-
 from comfy_api.v0_0_2 import IO
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,13 +27,13 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 try:
-    from ..utils.ts_model_manager import get_cached_model, MODEL_CONFIGS
     from ..utils.ts_logging import get_logger, log_banner, log_exception
+    from ..utils.ts_model_manager import MODEL_CONFIGS, get_cached_model
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
-    from utils.ts_model_manager import get_cached_model, MODEL_CONFIGS
-    from utils.ts_logging import get_logger, log_banner, log_exception
     from nodes._v3_types import CosyVoiceModel
+    from utils.ts_logging import get_logger, log_banner, log_exception
+    from utils.ts_model_manager import MODEL_CONFIGS, get_cached_model
 
 
 LOGGER = get_logger("TS CosyVoice Model Loader")
@@ -123,6 +122,7 @@ class TS_CosyVoice3_ModelLoader(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
         )
 
     @classmethod
@@ -165,6 +165,6 @@ class TS_CosyVoice3_ModelLoader(IO.ComfyNode):
             return IO.NodeOutput(model_info)
 
         except Exception as e:
-            error_msg = f"Error loading model: {str(e)}"
+            error_msg = f"Error loading model: {e!s}"
             log_exception(LOGGER, "[TS CosyVoice Model Loader] ERROR", e)
             raise RuntimeError(error_msg) from e

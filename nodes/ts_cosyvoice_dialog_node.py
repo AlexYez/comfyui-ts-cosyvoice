@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from comfy_api.v0_0_2 import IO
 
@@ -25,22 +25,25 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 try:
-    from ..utils.ts_audio_utils import tensor_to_comfyui_audio, save_raw_audio_to_tempfile, cleanup_temp_file
+    from ..utils.ts_audio_utils import cleanup_temp_file, save_raw_audio_to_tempfile, tensor_to_comfyui_audio
     from ..utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
+    from ..utils.ts_fingerprint import seed_fingerprint
+    from ..utils.ts_interrupt import raise_if_interrupted
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
     from ..utils.ts_whisper_utils import transcribe_audio
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
-    from utils.ts_audio_utils import tensor_to_comfyui_audio, save_raw_audio_to_tempfile, cleanup_temp_file
+    from nodes._v3_types import CosyVoiceModel
+    from utils.ts_audio_utils import cleanup_temp_file, save_raw_audio_to_tempfile, tensor_to_comfyui_audio
     from utils.ts_cosyvoice_adapter import END_OF_PROMPT, SYSTEM_PROMPT, is_cosyvoice3_model_info
+    from utils.ts_fingerprint import seed_fingerprint
+    from utils.ts_interrupt import raise_if_interrupted
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import build_empty_audio, collect_speech_chunks, merge_speech_chunks, set_seed
     from utils.ts_whisper_utils import transcribe_audio
-    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Dialog")
 
@@ -71,10 +74,10 @@ def _validate_audio_duration(audio: Dict[str, Any], speaker_name: str) -> float:
 
 
 def _prepare_speaker_data(
-    speakers: Dict[str, Optional[Dict[str, Any]]],
+    speakers: Dict[str, Dict[str, Any] | None],
     is_v3: bool,
     temp_file_list: List[str],
-) -> Tuple[Dict[str, str], Dict[str, Optional[str]]]:
+) -> Tuple[Dict[str, str], Dict[str, str | None]]:
     """
     Prepare speaker temp files and transcripts.
 
@@ -88,12 +91,15 @@ def _prepare_speaker_data(
         transcripts: Dict mapping speaker ID to formatted transcript (or None for cross-lingual fallback)
     """
     temp_files: Dict[str, str] = {}
-    transcripts: Dict[str, Optional[str]] = {}
+    transcripts: Dict[str, str | None] = {}
 
     for speaker_id, audio in speakers.items():
         if audio is None:
             continue
 
+        # Transcribing up to four references is itself slow enough to be worth
+        # cancelling, and it happens before the first line is ever generated.
+        raise_if_interrupted()
         temp_file = save_raw_audio_to_tempfile(audio)
         temp_file_list.append(temp_file)
         temp_files[speaker_id] = temp_file
@@ -118,7 +124,7 @@ def _prepare_speaker_data(
     return temp_files, transcripts
 
 
-def _parse_dialog_line(line: str) -> Tuple[Optional[str], str]:
+def _parse_dialog_line(line: str) -> Tuple[str | None, str]:
     """Parse a dialog line to extract speaker and content."""
     line = line.strip()
     if not line:
@@ -209,7 +215,13 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
         )
+
+    @classmethod
+    def fingerprint_inputs(cls, seed: int = 42, **kwargs) -> Any:
+        """Make seed=-1 mean what its tooltip says: a new take on every run."""
+        return seed_fingerprint(seed)
 
     @classmethod
     def execute(
@@ -219,8 +231,8 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
         speaker_A_Audio: Dict[str, Any],
         speaker_B_Audio: Dict[str, Any],
         speed: float = 1.0,
-        speaker_C_Audio: Optional[Dict[str, Any]] = None,
-        speaker_D_Audio: Optional[Dict[str, Any]] = None,
+        speaker_C_Audio: Dict[str, Any] | None = None,
+        speaker_D_Audio: Dict[str, Any] | None = None,
         seed: int = 42,
     ) -> IO.NodeOutput:
         """Generate multi-speaker dialog audio."""
@@ -250,7 +262,7 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             if speaker_D_Audio is not None:
                 _validate_audio_duration(speaker_D_Audio, "D")
 
-            speakers: Dict[str, Optional[Dict[str, Any]]] = {
+            speakers: Dict[str, Dict[str, Any] | None] = {
                 "A": speaker_A_Audio,
                 "B": speaker_B_Audio,
                 "C": speaker_C_Audio,
@@ -261,16 +273,28 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
 
             lines = dialog_text.strip().splitlines()
             valid_lines: List[Tuple[str, str]] = []
+            # Skipped lines used to be a log warning only, so a script with a
+            # mislabelled prefix rendered short and the user had no idea why.
+            speakers_without_audio: List[str] = []
+            unparsed_line_count = 0
             for line in lines:
                 speaker_id, content = _parse_dialog_line(line)
                 if speaker_id and content:
                     if speaker_id in temp_files:
                         valid_lines.append((speaker_id, content))
                     else:
+                        if speaker_id not in speakers_without_audio:
+                            speakers_without_audio.append(speaker_id)
                         LOGGER.warning(
                             "[TS CosyVoice3 Dialog] Skipping line for Speaker %s: no audio reference provided",
                             speaker_id,
                         )
+                elif line.strip():
+                    unparsed_line_count += 1
+                    LOGGER.warning(
+                        "[TS CosyVoice3 Dialog] Skipping unrecognised line: %s",
+                        preview_text(line, 60),
+                    )
 
             if not valid_lines:
                 LOGGER.warning("[TS CosyVoice3 Dialog] No valid dialog lines found!")
@@ -288,6 +312,8 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             combined_waveforms: List[torch.Tensor] = []
 
             for i, (speaker_id, content) in enumerate(valid_lines):
+                # Cancel between lines: a long script is many separate inferences.
+                raise_if_interrupted()
                 LOGGER.info(
                     "[TS CosyVoice3 Dialog] Generating line %s/%s: Speaker %s",
                     i + 1,
@@ -352,6 +378,16 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
 
             duration = combined_waveform.shape[-1] / sample_rate
             message = f"Dialog synthesized successfully! Duration: {duration:.2f}s, Lines: {len(valid_lines)}"
+            if speakers_without_audio:
+                message += (
+                    f". Skipped lines for Speaker "
+                    f"{', '.join(sorted(speakers_without_audio))}: no reference audio connected"
+                )
+            if unparsed_line_count:
+                message += (
+                    f". Skipped {unparsed_line_count} line(s) with no recognised "
+                    f"SPEAKER A:/B:/C:/D: prefix"
+                )
 
             log_banner(
                 LOGGER,

@@ -123,7 +123,7 @@
     },
     {
       "id": 59,
-      "type": "SaveAudioMP3",
+      "type": "SaveAudioAdvanced",
       "pos": [
         1290,
         -2180
@@ -150,6 +150,7 @@
       },
       "widgets_values": [
         "audio/ComfyUI",
+        "mp3",
         "V0"
       ]
     },
@@ -240,7 +241,7 @@
     },
     {
       "id": 64,
-      "type": "SaveAudioMP3",
+      "type": "SaveAudioAdvanced",
       "pos": [
         1110,
         -1570
@@ -267,6 +268,7 @@
       },
       "widgets_values": [
         "audio/ComfyUI",
+        "mp3",
         "V0"
       ]
     },
@@ -478,11 +480,7 @@
         "ver": "0.18.1",
         "Node name for S&R": "PreviewAny"
       },
-      "widgets_values": [
-        null,
-        null,
-        false
-      ]
+      "widgets_values": []
     },
     {
       "id": 76,
@@ -520,7 +518,7 @@
       "widgets_values": [
         "Княжна Марья произвела на него приятное впечатление под Смоленском. То, что он встретил ее тогда в таких особенных условиях, и то, что именно на нее одно время его мать указывала ему как на богатую партию, сделали то, что он обратил на нее особенное внимание.",
         "Speak in a calm, soft, soothing tone with gentle emphasis, stable rhythm, smooth phrasing, and restrained emotional movement.",
-        "my_speaker",
+        "Nastya",
         1,
         42,
         "randomize",
@@ -564,7 +562,7 @@
     },
     {
       "id": 78,
-      "type": "SaveAudioMP3",
+      "type": "SaveAudioAdvanced",
       "pos": [
         1270,
         -130
@@ -591,6 +589,7 @@
       },
       "widgets_values": [
         "audio/ComfyUI",
+        "mp3",
         "V0"
       ]
     },
@@ -752,7 +751,7 @@
     },
     {
       "id": 82,
-      "type": "SaveAudioMP3",
+      "type": "SaveAudioAdvanced",
       "pos": [
         1280,
         520
@@ -779,6 +778,7 @@
       },
       "widgets_values": [
         "audio/ComfyUI",
+        "mp3",
         "V0"
       ]
     },
@@ -935,7 +935,7 @@
     },
     {
       "id": 88,
-      "type": "SaveAudioMP3",
+      "type": "SaveAudioAdvanced",
       "pos": [
         1250,
         1350
@@ -962,6 +962,7 @@
       },
       "widgets_values": [
         "audio/ComfyUI",
+        "mp3",
         "V0"
       ]
     }

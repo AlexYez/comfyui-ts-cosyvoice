@@ -43,7 +43,7 @@ _WINDOWS_RESERVED_NAMES = {
 NONE_PRESET = "[none]"
 _NONE_PRESET = NONE_PRESET
 
-_SPEAKER_PRESET_CACHE: "tuple[int, list[str]] | None" = None
+_SPEAKER_PRESET_CACHE: tuple[int, list[str]] | None = None
 
 
 def get_speaker_dir() -> str:
@@ -60,7 +60,7 @@ def get_speaker_save_dir() -> str:
     return speaker_dir
 
 
-def list_speaker_presets() -> "list[str]":
+def list_speaker_presets() -> list[str]:
     """List saved speaker presets with a lightweight directory mtime cache."""
     global _SPEAKER_PRESET_CACHE
 

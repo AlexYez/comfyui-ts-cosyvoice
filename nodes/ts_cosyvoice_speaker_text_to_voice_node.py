@@ -30,6 +30,11 @@ try:
         get_runtime_device,
         is_cosyvoice3_model_info,
     )
+    from ..utils.ts_fingerprint import (
+        combine_fingerprints,
+        seed_fingerprint,
+        speaker_preset_fingerprint,
+    )
     from ..utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from ..utils.ts_node_utils import (
         CUSTOM_INSTRUCTION_LABEL,
@@ -47,12 +52,18 @@ try:
     )
     from ._v3_types import CosyVoiceModel
 except (ImportError, ValueError):
+    from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_utils import tensor_to_comfyui_audio
     from utils.ts_cosyvoice_adapter import (
         apply_speaker_prompt_tokens,
         format_instruct_text,
         get_runtime_device,
         is_cosyvoice3_model_info,
+    )
+    from utils.ts_fingerprint import (
+        combine_fingerprints,
+        seed_fingerprint,
+        speaker_preset_fingerprint,
     )
     from utils.ts_logging import get_logger, log_banner, log_exception, preview_text
     from utils.ts_node_utils import (
@@ -69,10 +80,8 @@ except (ImportError, ValueError):
         list_speaker_presets,
         load_speaker_preset,
     )
-    from nodes._v3_types import CosyVoiceModel
 
 import comfy.utils
-
 
 LOGGER = get_logger("TS CosyVoice Speaker Text To Voice")
 # Widget options are read once at schema build time (ComfyUI caches the schema);
@@ -151,6 +160,22 @@ class TS_CosyVoice3_SpeakerInstruct2(IO.ComfyNode):
             ],
             search_aliases=[],
             is_output_node=False,
+            essentials_category="Audio",
+        )
+
+    @classmethod
+    def fingerprint_inputs(cls, speaker_preset: str = "", seed: int = 42, **kwargs) -> Any:
+        """
+        Re-run when the preset file itself changed, not only when its name did.
+
+        The voice comes from a `.pt` on disk that the Save Speaker node can
+        rewrite under the same name. Keying on the name alone made this node keep
+        serving the voice from before the re-save, because none of its inputs had
+        changed. The seed part additionally honours seed=-1.
+        """
+        return combine_fingerprints(
+            seed_fingerprint(seed),
+            speaker_preset_fingerprint(speaker_preset),
         )
 
     @classmethod

@@ -1,6 +1,5 @@
 from typing import Any
 
-
 SYSTEM_PROMPT = "You are a helpful assistant."
 END_OF_PROMPT = "<|endofprompt|>"
 

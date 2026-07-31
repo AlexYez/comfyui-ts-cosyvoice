@@ -8,5 +8,12 @@
 tests/
 pytest.ini
 
+# Doc/locale generator. Its *output* (web/, locales/) ships; the generator and
+# its prose source are only needed to regenerate, which end users never do.
+tools/
+
+# Lint config — dev tooling, not needed at install time.
+ruff.toml
+
 # CI workflows and issue / PR templates — not needed at install time.
 .github/

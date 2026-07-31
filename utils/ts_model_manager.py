@@ -3,22 +3,31 @@ Model Manager for TS CosyVoice3
 Handles model downloading, caching, and loading
 """
 
+import json
 import os
 import shutil
+import threading
 import zipfile
-from typing import Optional, Dict, Any
+from typing import Any, Dict
 
 import torch
 
 try:
-    from .ts_logging import get_logger, log_banner, log_exception
     from .ts_cosyvoice_adapter import get_runtime_device
+    from .ts_logging import get_logger, log_banner, log_exception
 except (ImportError, ValueError):
-    from ts_logging import get_logger, log_banner, log_exception
     from ts_cosyvoice_adapter import get_runtime_device
+    from ts_logging import get_logger, log_banner, log_exception
 
-# Global model cache
+# Global model cache. Module-level rather than class-level: V3 node classes are
+# locked, so `cls.cache = ...` would raise.
 _MODEL_CACHE = {}
+
+# Guards the load-and-insert sequence. ComfyUI runs one prompt at a time today,
+# so the plain `if key in cache` this replaces was not actively losing races —
+# but a bare check-then-load would download and load the same 1.5 GB model twice
+# the moment anything does run two loaders concurrently.
+_MODEL_CACHE_LOCK = threading.Lock()
 LOGGER = get_logger("TS CosyVoice Model Manager")
 
 # Model configurations
@@ -92,7 +101,7 @@ def get_expected_model_files(model_version: str) -> set[str]:
     }
 
 
-def find_model_root(model_dir: str, model_version: Optional[str] = None) -> Optional[str]:
+def find_model_root(model_dir: str, model_version: str | None = None) -> str | None:
     """Find the actual directory containing a complete downloaded model."""
     if not os.path.exists(model_dir):
         return None
@@ -161,8 +170,76 @@ def _validate_onnx_file(file_path: str) -> str | None:
     return None
 
 
+# Sidecar recording which deep integrity checks passed, and for exactly which
+# files. Lives inside the model root, so clear_model_directory() drops it with
+# the rest when a model is re-downloaded.
+VALIDATION_RECORD_NAME = ".ts_validation.json"
+
+# What the deep pass actually verifies. Recorded verbatim so the file states what
+# was checked rather than implying a stronger guarantee than was made.
+_DEEP_CHECKS = ["torch_archive_crc", "onnx_session_load"]
+
+
+def _file_signature(model_root: str, file_names: "set[str]") -> "dict[str, list[int]]":
+    """Size and mtime of every required file — enough to notice a replaced file."""
+    signature: dict[str, list[int]] = {}
+    for file_name in sorted(file_names):
+        stat_result = os.stat(os.path.join(model_root, file_name))
+        signature[file_name] = [stat_result.st_size, stat_result.st_mtime_ns]
+    return signature
+
+
+def _read_validation_record(model_root: str) -> "dict[str, Any] | None":
+    record_path = os.path.join(model_root, VALIDATION_RECORD_NAME)
+    try:
+        with open(record_path, encoding="utf-8") as handle:
+            record = json.load(handle)
+    except (OSError, ValueError):
+        # No record, unreadable, or malformed: fall back to validating for real.
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _write_validation_record(model_root: str, model_version: str, signature: "dict[str, list[int]]") -> None:
+    record = {
+        "model_version": model_version,
+        "checks_passed": _DEEP_CHECKS,
+        "files": signature,
+    }
+    try:
+        with open(os.path.join(model_root, VALIDATION_RECORD_NAME), "w", encoding="utf-8") as handle:
+            json.dump(record, handle, indent=2)
+    except OSError as e:
+        # A read-only model dir is not a reason to fail a working model; we just
+        # pay for the deep check again next time.
+        LOGGER.warning("[TS CosyVoice Model Manager] Could not write validation record: %s", e)
+
+
+def _deep_checks_already_passed(
+    model_root: str, model_version: str, signature: "dict[str, list[int]]"
+) -> bool:
+    """True when this exact set of files already passed the expensive checks."""
+    record = _read_validation_record(model_root)
+    if record is None:
+        return False
+    return (
+        record.get("model_version") == model_version
+        and record.get("checks_passed") == _DEEP_CHECKS
+        and record.get("files") == signature
+    )
+
+
 def validate_model_root(model_root: str, model_version: str) -> str | None:
-    """Run structural and integrity validation for a downloaded model root."""
+    """
+    Run structural and integrity validation for a downloaded model root.
+
+    The cheap structural checks (presence, size, config contents) run every time.
+    The expensive ones — CRC-ing multi-hundred-megabyte torch archives and
+    opening both ONNX models — used to run on the first load after every ComfyUI
+    start, re-proving something that had not changed. They now run once per set
+    of files and the result is recorded next to the weights; replacing any file
+    invalidates the record and the deep pass runs again.
+    """
     config = MODEL_CONFIGS[model_version]
     required_files = get_expected_model_files(model_version)
 
@@ -175,13 +252,29 @@ def validate_model_root(model_root: str, model_version: str) -> str | None:
 
     config_path = os.path.join(model_root, config["config_file"])
     try:
-        with open(config_path, "r", encoding="utf-8") as config_file:
+        with open(config_path, encoding="utf-8") as config_file:
             config_text = config_file.read()
     except OSError as e:
         return f"Failed to read config file {config_path}: {e}"
 
     if "sample_rate" not in config_text or "get_tokenizer" not in config_text:
         return f"Config file is incomplete or invalid: {config_path}"
+
+    try:
+        signature = _file_signature(model_root, required_files)
+    except OSError as e:
+        return f"Could not stat model files in {model_root}: {e}"
+
+    if _deep_checks_already_passed(model_root, model_version, signature):
+        LOGGER.info(
+            "[TS CosyVoice Model Manager] Integrity already recorded for these files; "
+            "skipping checkpoint CRC and ONNX load"
+        )
+        return None
+
+    LOGGER.info(
+        "[TS CosyVoice Model Manager] Verifying model integrity (first time for these files)..."
+    )
 
     for checkpoint_name in ("llm.pt", "flow.pt", "hift.pt"):
         archive_error = _validate_torch_archive(os.path.join(model_root, checkpoint_name))
@@ -193,6 +286,7 @@ def validate_model_root(model_root: str, model_version: str) -> str | None:
         if onnx_error:
             return onnx_error
 
+    _write_validation_record(model_root, model_version, signature)
     return None
 
 
@@ -361,13 +455,13 @@ def get_model_path(
 
         except Exception as e2:
             raise RuntimeError(
-                f"Failed to download model from both sources. Last error: {str(e2)}"
+                f"Failed to download model from both sources. Last error: {e2!s}"
             ) from e2
 
 
 def load_cosyvoice_model(
     model_path: str,
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     fp16: bool = False,
 ) -> Any:
     """
@@ -428,7 +522,7 @@ def load_cosyvoice_model(
 def get_cached_model(
     model_version: str,
     download_source: str = "ModelScope",
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     fp16: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -451,11 +545,31 @@ def get_cached_model(
     effective_fp16 = bool(fp16) and torch.cuda.is_available()
     cache_key = f"{model_version}_fp16_{int(effective_fp16)}"
 
-    # Check cache
-    if cache_key in _MODEL_CACHE:
+    # Fast path: already loaded, no lock needed.
+    cached_info = _MODEL_CACHE.get(cache_key)
+    if cached_info is not None:
         LOGGER.info("[TS CosyVoice Model Manager] Using cached model: %s", model_version)
-        return _MODEL_CACHE[cache_key]
+        return cached_info
 
+    with _MODEL_CACHE_LOCK:
+        # Re-check under the lock: another thread may have finished loading while
+        # we waited, and loading again would cost a second copy in VRAM.
+        cached_info = _MODEL_CACHE.get(cache_key)
+        if cached_info is not None:
+            LOGGER.info("[TS CosyVoice Model Manager] Using cached model: %s", model_version)
+            return cached_info
+
+        return _load_and_cache_model(cache_key, model_version, download_source, device, fp16)
+
+
+def _load_and_cache_model(
+    cache_key: str,
+    model_version: str,
+    download_source: str,
+    device: torch.device | None,
+    fp16: bool,
+) -> Dict[str, Any]:
+    """Download, load and cache a model. Callers must hold _MODEL_CACHE_LOCK."""
     # Get model path (download if needed)
     model_path = get_model_path(model_version, download_source)
 
