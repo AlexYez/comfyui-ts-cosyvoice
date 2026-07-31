@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-31
+
+Minor release: acts on a ComfyUI node-pack audit and on a follow-up read-only
+code audit. No node was renamed, no input or output was added, removed or
+reordered, and the speaker-preset and `COSYVOICE_MODEL` formats are unchanged —
+saved workflows and existing `.pt` presets keep working. The contract test now
+verifies that positionally, including input order, defaults and ranges.
+
+### Added
+- **Embedded help.** `WEB_DIRECTORY` is declared and every node ships a help page
+  at `web/docs/<node_id>/{en,ru}.md`; the per-node help button previously 404'd.
+- **Localisation.** `locales/{en,ru}/nodeDefs.json` carry descriptions, input and
+  output tooltips. Russian tooltips stay in the schema as the fallback; English
+  now reaches an English UI instead of showing Cyrillic.
+- **Example workflow discoverability.** `workflows/` is now `example_workflows/`
+  — the folder name ComfyUI prefers — with the same-named `.jpg` thumbnail the
+  template browser shows on its card.
+- `essentials_category = "Audio"` on all seven nodes (additive; nothing moves in
+  the normal category menu).
+- `validate_inputs` on Save Speaker rejects an unusable preset name during graph
+  validation instead of after the model loader has already run.
+
+### Fixed
+- **Cancel works.** No loop read ComfyUI's interrupt flag, so cancelling a long
+  voice conversion did nothing and the node ran to completion. Checks now sit in
+  the streaming loop, the voice-conversion chunk loop and the dialog line loop.
+- **`seed = -1` means what its tooltip says.** With unchanged inputs ComfyUI
+  served the cached audio forever, so `-1` produced one take and then never
+  varied. The seeded nodes now fingerprint their inputs.
+- **Speaker Text To Voice notices a re-saved preset** instead of returning the
+  voice from before the re-save.
+- The README version badge, which had been stuck on `0.7.0`.
+- The example workflow no longer ships the deprecated `SaveAudioMP3`, and its
+  `speaker_preset` points at the preset its own Save Speaker node writes.
+
+### Changed
+- **Model integrity checks are recorded, not repeated.** CRC-ing the checkpoints
+  and opening both ONNX models used to run on the first load after every ComfyUI
+  start; the result is now recorded next to the weights and re-verified only when
+  a file changes.
+- **Whisper transcripts are cached by audio content**, so the dialog node stops
+  re-transcribing unchanged speaker references on every run.
+- The model cache takes a lock per cache key rather than one global lock held for
+  the duration of a multi-gigabyte download.
+- A failed auto-transcription is now logged as an explicit warning naming the
+  cause, and the Save Speaker help says where to look for it.
+
+### Internal
+- `ruff.toml` (vendored code excluded) and everything it flagged.
+- An API-pin canary so a future `comfy_api` divergence is a decision, not drift.
+- Guard tests tying the shipped documentation to actual behaviour, added after an
+  audit found help pages describing the pre-fix `seed` semantics.
+- Browser-driven round-trip tests proving `widgets_values` stays positionally
+  stable for every node.
+
 ## [0.9.1] - 2026-07-19
 
 Patch release: quality-audit follow-up. No node was renamed, no input/output was

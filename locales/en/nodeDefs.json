@@ -9,7 +9,7 @@
         "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
       },
       "seed": {
-        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+        "tooltip": "Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed."
       },
       "speed": {
         "tooltip": "Playback speed multiplier applied to the generated speech."
@@ -40,7 +40,7 @@
         "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
       },
       "seed": {
-        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+        "tooltip": "Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed."
       },
       "speaker_A_Audio": {
         "tooltip": "Reference voice for SPEAKER A. 3-10 seconds works best; 30 seconds is the hard limit."
@@ -95,7 +95,7 @@
         "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
       },
       "seed": {
-        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+        "tooltip": "Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed."
       },
       "speed": {
         "tooltip": "Playback speed multiplier applied to the generated speech."
@@ -170,7 +170,7 @@
         "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
       },
       "seed": {
-        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+        "tooltip": "Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed."
       },
       "speaker_preset": {
         "tooltip": "A voice preset saved earlier by TS CosyVoice Save Speaker, read from ComfyUI/models/cosyvoice/speaker/."
@@ -201,7 +201,7 @@
         "tooltip": "Shift the source pitch before conversion. Useful when source and target sit in different registers — try -12 or +12 when converting between a low and a high voice."
       },
       "seed": {
-        "tooltip": "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take."
+        "tooltip": "Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed."
       },
       "source_audio": {
         "tooltip": "The performance to re-voice. Timing and delivery are kept; only the timbre changes. Long audio is processed in chunks."

@@ -41,7 +41,6 @@ _WINDOWS_RESERVED_NAMES = {
 }
 
 NONE_PRESET = "[none]"
-_NONE_PRESET = NONE_PRESET
 
 _SPEAKER_PRESET_CACHE: tuple[int, list[str]] | None = None
 
@@ -196,7 +195,7 @@ def load_speaker_preset(speaker_name: str, device: Any = None) -> Dict[str, Any]
     """
     import torch
 
-    if speaker_name == _NONE_PRESET:
+    if speaker_name == NONE_PRESET:
         raise ValueError(
             "[TS CosyVoice3 Speaker IO] No speaker presets found. "
             "Use the TS CosyVoice Save Speaker node to create one first."

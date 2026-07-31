@@ -207,8 +207,15 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
             )
 
             # saved_path stays a plain path — it is a public output others may
-            # consume. The degraded-save warning goes to the node body instead,
-            # where it is actually visible; previously it only reached the log.
+            # consume, so the degraded-save warning cannot ride along in it.
+            #
+            # The ui payload below is emitted because it is the correct thing for
+            # a node to report, but do NOT describe it to users as visible: as of
+            # frontend 1.47.10 `ui.text` is rendered only for the PreviewAny and
+            # SaveText node types (both gated on an exact type name in
+            # addTextPreviewWidgets), and this pack ships no frontend extension of
+            # its own. Today the log line below is the only channel the user
+            # actually has; the docs say so.
             status = f"Saved speaker preset '{speaker_name}'."
             if transcription_warning:
                 status += (
@@ -216,6 +223,13 @@ class TS_CosyVoice3_SaveSpeaker(IO.ComfyNode):
                     f"\nThe preset was saved with an empty reference text, which clones"
                     f" noticeably worse. Fill in reference_text by hand and save again"
                     f" for a better result."
+                )
+                LOGGER.warning(
+                    "[TS CosyVoice3 SaveSpeaker] Preset '%s' saved WITHOUT a reference "
+                    "text (%s). Voice cloning quality will be noticeably worse; set "
+                    "reference_text manually and save again.",
+                    speaker_name,
+                    transcription_warning,
                 )
             return IO.NodeOutput(save_path, ui=UI.PreviewText(status))
         except Exception as exc:

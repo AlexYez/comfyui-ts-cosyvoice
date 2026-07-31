@@ -169,6 +169,10 @@ def _validate_against_schema(schema: Any, doc: dict[str, Any]) -> None:
     if not (schema.description or "").strip():
         raise ValueError(f"{node_id}: schema has no description")
 
+    for required_key in ("description_ru", "intro_en", "intro_ru", "notes_en", "notes_ru"):
+        if not doc.get(required_key):
+            raise ValueError(f"{node_id}: ts_node_docs_source is missing {required_key!r}")
+
 
 def _tooltip_for(spec: Any, doc: dict[str, Any], lang: str) -> str:
     """The Russian tooltip lives in the schema; the English one in the prose source."""
@@ -232,11 +236,13 @@ def _render_node_defs(schemas: list[Any], lang: str) -> dict[str, Any]:
     for schema in schemas:
         doc = NODE_DOCS[schema.node_id]
         entry: dict[str, Any] = {
-            # The English description already lives in the schema and is the
-            # frontend's fallback; repeating it here keeps both locales complete
-            # and lets the parity test compare like with like.
+            # This string is the node-library subtitle and the search-result line,
+            # so both locales use their one-line description — the English one
+            # from the schema, the Russian one from the prose source. Using the
+            # long intro paragraph here (as an earlier version did for Russian)
+            # made the Russian entry three times longer than the English one.
             "description": (
-                schema.description.strip() if lang == "en" else doc["intro_ru"].strip()
+                schema.description.strip() if lang == "en" else doc["description_ru"].strip()
             ),
             "inputs": {
                 spec.id: {"tooltip": _tooltip_for(spec, doc, lang)}

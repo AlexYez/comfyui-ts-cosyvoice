@@ -24,9 +24,11 @@ from __future__ import annotations
 # Reused verbatim across nodes so the wording cannot drift between them.
 _MODEL_EN = "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
 _SEED_EN = (
-    "Random seed. Note that -1 does not give you a new take on re-run: ComfyUI "
-    "caches a node whose inputs did not change. Use the seed widget's "
-    "control_after_generate: randomize to actually get a different take."
+    "Random seed. Set it to -1 for a fresh take on every run: the node then "
+    "re-runs instead of returning its cached audio. Any value from 0 up is "
+    "deterministic — re-running with everything unchanged returns the previous "
+    "result, so change the seed (or use control_after_generate: randomize) when "
+    "you want a different take from a fixed seed."
 )
 _TEXT_NORMALIZE_EN = (
     "Run CosyVoice's text frontend (number and abbreviation expansion). Turn it "
@@ -57,19 +59,26 @@ _REFERENCE_AUDIO_NOTE_RU = (
     "чем длинный шумный фрагмент."
 )
 _SEED_NOTE_EN = (
-    "To get a different take, set the seed widget's control_after_generate to "
-    "randomize. Leaving seed at -1 does not help on its own: with unchanged "
-    "inputs ComfyUI returns the cached result instead of running the node again."
+    "Two ways to get a different take. seed = -1 re-runs the node on every "
+    "execution, so each run is a new take. With a fixed seed the result is "
+    "reproducible, and ComfyUI returns the cached audio until something changes "
+    "— set control_after_generate to randomize if you want the seed itself to "
+    "move between runs."
 )
 _SEED_NOTE_RU = (
-    "Чтобы получить другой дубль, поставьте у виджета seed режим "
-    "control_after_generate: randomize. Само по себе значение -1 не помогает: "
-    "при неизменных входах ComfyUI возвращает результат из кэша, а не запускает "
-    "ноду заново."
+    "Получить другой дубль можно двумя способами. Значение seed = -1 заставляет "
+    "ноду выполняться заново при каждом запуске, поэтому каждый прогон даёт "
+    "новый дубль. При фиксированном seed результат воспроизводим, и ComfyUI "
+    "отдаёт аудио из кэша, пока ничего не изменилось — поставьте "
+    "control_after_generate: randomize, если хотите, чтобы сам seed менялся "
+    "между запусками."
 )
 
 NODE_DOCS: dict[str, dict] = {
     "TS_CosyVoice3_ModelLoader": {
+        "description_ru": (
+            "Загружает модель CosyVoice с автоматическим скачиванием и кэшированием."
+        ),
         "intro_en": (
             "Downloads (once) and loads a CosyVoice model, then hands it to every "
             "other node in the pack through the COSYVOICE_MODEL output. Put one "
@@ -126,6 +135,9 @@ NODE_DOCS: dict[str, dict] = {
         ],
     },
     "TS_CosyVoice3_Instruct2": {
+        "description_ru": (
+            "Синтез речи с тембром из референса и эмоцией, заданной инструкцией."
+        ),
         "intro_en": (
             "Zero-shot voice cloning: give it a reference recording and the text "
             "to read, and it speaks that text in the reference voice. The "
@@ -176,6 +188,9 @@ NODE_DOCS: dict[str, dict] = {
         ],
     },
     "TS_CosyVoice3_SpeakerInstruct2": {
+        "description_ru": (
+            "Синтез речи по сохранённому пресету голоса (.pt) и инструкции эмоции."
+        ),
         "intro_en": (
             "The same instruction-guided synthesis as TS CosyVoice Text to Voice, "
             "but the voice comes from a preset you saved earlier with TS CosyVoice "
@@ -234,6 +249,9 @@ NODE_DOCS: dict[str, dict] = {
         ],
     },
     "TS_CosyVoice3_CrossLingual": {
+        "description_ru": (
+            "Кросс-язычный синтез: тембр из референса сохраняется, язык меняется."
+        ),
         "intro_en": (
             "Speaks text in a different language while keeping the timbre of the "
             "reference voice. The reference may be in one language and the text "
@@ -283,6 +301,9 @@ NODE_DOCS: dict[str, dict] = {
         ],
     },
     "TS_CosyVoice3_VoiceConversion": {
+        "description_ru": (
+            "Преобразует исходное аудио в тембр целевого голоса (voice-to-voice)."
+        ),
         "intro_en": (
             "Re-voices an existing recording: keeps the timing, phrasing and "
             "delivery of the source performance, and replaces its timbre with "
@@ -345,6 +366,9 @@ NODE_DOCS: dict[str, dict] = {
         ],
     },
     "TS_CosyVoice3_SaveSpeaker": {
+        "description_ru": (
+            "Извлекает признаки голоса из референса и сохраняет их в пресет .pt."
+        ),
         "intro_en": (
             "Extracts the speaker features from a reference recording and saves "
             "them as a reusable `.pt` preset, so you do not have to keep the "
@@ -384,9 +408,11 @@ NODE_DOCS: dict[str, dict] = {
             "downloads the Whisper 'base' model (about 140 MB) into "
             "`ComfyUI/models/whisper/`.",
             "If Whisper is missing or fails, the preset is still saved but with "
-            "an empty transcript, and the node body shows a warning saying so. "
-            "Such a preset clones noticeably worse — fill reference_text in by "
-            "hand and save again.",
+            "an empty transcript, and a warning naming the reason is written to "
+            "the ComfyUI console log. Such a preset clones noticeably worse, and "
+            "the node gives no on-canvas sign of it — check the log after saving "
+            "a preset without a reference_text, then fill the text in by hand and "
+            "save again.",
         ],
         "notes_ru": [
             _REFERENCE_AUDIO_NOTE_RU,
@@ -397,12 +423,17 @@ NODE_DOCS: dict[str, dict] = {
             "обращении скачивается модель Whisper 'base' (около 140 МБ) в "
             "`ComfyUI/models/whisper/`.",
             "Если Whisper отсутствует или падает, пресет всё равно сохраняется, "
-            "но с пустой расшифровкой, и в теле ноды появляется предупреждение. "
-            "Такой пресет клонирует заметно хуже — впишите reference_text "
-            "вручную и сохраните заново.",
+            "но с пустой расшифровкой, а причина попадает предупреждением в лог "
+            "консоли ComfyUI. Такой пресет клонирует заметно хуже, и на канвасе "
+            "нода этого никак не показывает — после сохранения пресета с пустым "
+            "reference_text загляните в лог, впишите текст вручную и сохраните "
+            "заново.",
         ],
     },
     "TS_CosyVoice3_Dialog": {
+        "description_ru": (
+            "Многоголосый синтез диалога с клонированием голосов (SPEAKER A: / B: ...)."
+        ),
         "intro_en": (
             "Turns a script into a multi-voice conversation. Label each line with "
             "SPEAKER A:, SPEAKER B: and so on, give each speaker a reference "

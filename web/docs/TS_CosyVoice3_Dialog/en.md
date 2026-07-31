@@ -14,7 +14,7 @@ SPEAKER B: I'm doing great, thanks for asking!` | The script, one line per turn,
 | `speed` | FLOAT | yes | `1.0` | Playback speed multiplier applied to every line of the dialog. Range: `0.5`–`2.0`, step `0.05`. |
 | `speaker_C_Audio` | AUDIO | no | — | Optional reference voice for SPEAKER C. |
 | `speaker_D_Audio` | AUDIO | no | — | Optional reference voice for SPEAKER D. |
-| `seed` | INT | no | `42` | Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take. Range: `-1`–`2147483647`. |
+| `seed` | INT | no | `42` | Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed. Range: `-1`–`2147483647`. |
 
 ## Outputs
 

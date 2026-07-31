@@ -22,7 +22,7 @@ Extracts the speaker features from a reference recording and saves them as a reu
 - Reference audio is trimmed to the first 30 seconds and downmixed to mono 24 kHz before it reaches the model. Clean speech without music or background noise clones far better than a long noisy sample.
 - Presets are written to `ComfyUI/models/cosyvoice/speaker/`. Saving under an existing name overwrites it.
 - Leaving reference_text empty pulls in Whisper. The first time, that downloads the Whisper 'base' model (about 140 MB) into `ComfyUI/models/whisper/`.
-- If Whisper is missing or fails, the preset is still saved but with an empty transcript, and the node body shows a warning saying so. Such a preset clones noticeably worse — fill reference_text in by hand and save again.
+- If Whisper is missing or fails, the preset is still saved but with an empty transcript, and a warning naming the reason is written to the ComfyUI console log. Such a preset clones noticeably worse, and the node gives no on-canvas sign of it — check the log after saving a preset without a reference_text, then fill the text in by hand and save again.
 
 ---
 

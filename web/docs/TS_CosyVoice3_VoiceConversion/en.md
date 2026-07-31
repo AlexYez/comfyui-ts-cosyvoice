@@ -11,7 +11,7 @@ Re-voices an existing recording: keeps the timing, phrasing and delivery of the 
 | `target_audio` | AUDIO | yes | — | The voice to sound like. Trimmed to 30 seconds and converted to the model's format. |
 | `speed` | FLOAT | yes | `1.0` | Playback speed multiplier applied to the generated speech. Range: `0.5`–`2.0`, step `0.05`. |
 | `pitch_shift_semitones` | INT | yes | `0` | Shift the source pitch before conversion. Useful when source and target sit in different registers — try -12 or +12 when converting between a low and a high voice. Range: `-12`–`12`, step `1`. |
-| `seed` | INT | no | `42` | Random seed. Note that -1 does not give you a new take on re-run: ComfyUI caches a node whose inputs did not change. Use the seed widget's control_after_generate: randomize to actually get a different take. Range: `-1`–`2147483647`. |
+| `seed` | INT | no | `42` | Random seed. Set it to -1 for a fresh take on every run: the node then re-runs instead of returning its cached audio. Any value from 0 up is deterministic — re-running with everything unchanged returns the previous result, so change the seed (or use control_after_generate: randomize) when you want a different take from a fixed seed. Range: `-1`–`2147483647`. |
 
 ## Outputs
 

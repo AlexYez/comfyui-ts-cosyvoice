@@ -23,11 +23,28 @@ except (ImportError, ValueError):
 # locked, so `cls.cache = ...` would raise.
 _MODEL_CACHE = {}
 
-# Guards the load-and-insert sequence. ComfyUI runs one prompt at a time today,
-# so the plain `if key in cache` this replaces was not actively losing races —
-# but a bare check-then-load would download and load the same 1.5 GB model twice
-# the moment anything does run two loaders concurrently.
-_MODEL_CACHE_LOCK = threading.Lock()
+# One lock per cache key, so loading model A never blocks a caller that wants
+# model B. A single global lock was held for the whole download — potentially
+# minutes and ~1.5 GB — which serialised unrelated loads.
+#
+# ComfyUI runs one prompt at a time today, so the plain `if key in cache` this
+# replaces was not actively losing races; a bare check-then-load would still
+# download and load the same weights twice the moment anything does run two
+# loaders concurrently.
+_MODEL_CACHE_KEY_LOCKS: "dict[str, threading.Lock]" = {}
+
+# Guards only the creation of the per-key locks above — never held during I/O.
+_MODEL_CACHE_LOCK_REGISTRY = threading.Lock()
+
+
+def _lock_for_cache_key(cache_key: str) -> threading.Lock:
+    """Return the lock guarding one cache key, creating it once."""
+    with _MODEL_CACHE_LOCK_REGISTRY:
+        lock = _MODEL_CACHE_KEY_LOCKS.get(cache_key)
+        if lock is None:
+            lock = threading.Lock()
+            _MODEL_CACHE_KEY_LOCKS[cache_key] = lock
+        return lock
 LOGGER = get_logger("TS CosyVoice Model Manager")
 
 # Model configurations
@@ -551,7 +568,7 @@ def get_cached_model(
         LOGGER.info("[TS CosyVoice Model Manager] Using cached model: %s", model_version)
         return cached_info
 
-    with _MODEL_CACHE_LOCK:
+    with _lock_for_cache_key(cache_key):
         # Re-check under the lock: another thread may have finished loading while
         # we waited, and loading again would cost a second copy in VRAM.
         cached_info = _MODEL_CACHE.get(cache_key)
@@ -569,7 +586,7 @@ def _load_and_cache_model(
     device: torch.device | None,
     fp16: bool,
 ) -> Dict[str, Any]:
-    """Download, load and cache a model. Callers must hold _MODEL_CACHE_LOCK."""
+    """Download, load and cache a model. Callers must hold this key's lock."""
     # Get model path (download if needed)
     model_path = get_model_path(model_version, download_source)
 
