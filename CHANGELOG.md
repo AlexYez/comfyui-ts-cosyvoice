@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-07-31
+
+Stable release. **No functional change from 0.10.0** — the code, the generated
+help pages and the locale tables are identical. What changes is the promise:
+the pack's public surface is now considered stable, and the items below will not
+change without a major version and a documented migration.
+
+Frozen from this release on:
+
+- the seven `node_id` values, which are what a saved workflow stores;
+- input **names**, order and defaults — `widgets_values` is a positional array,
+  so inserting or reordering a serialising input rewrites every saved graph;
+- output names, order and types;
+- the `COSYVOICE_MODEL` dictionary passed from the loader to every other node;
+- the on-disk speaker-preset format (`{name: model_input}` in a `.pt`, loaded
+  with `weights_only=True`), including presets written by 0.6.x and later.
+
+`tests/test_node_contracts.py` checks all of the above against
+`tests/contracts/v1_baseline.json` on every run, and the browser round-trip
+tests verify the positional guarantee through the real ComfyUI frontend.
+
+Not covered by the stability promise: log wording, tooltips and help-page prose,
+`essentials_category`, the contents of `configs/ts_emotion_presets.json`, and the
+vendored `cosyvoice/` and `matcha/` trees, which track upstream.
+
 ## [0.10.0] - 2026-07-31
 
 Minor release: acts on a ComfyUI node-pack audit and on a follow-up read-only

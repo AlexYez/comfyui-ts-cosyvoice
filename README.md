@@ -7,7 +7,7 @@
 **Клонируйте голос. Меняйте эмоции. Локализуйте на 9 языков.**
 **Соберите многоголосый диалог одним нодом — прямо в ComfyUI.**
 
-[![Version](https://img.shields.io/badge/version-0.10.0-blue?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](./CHANGELOG.md)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
