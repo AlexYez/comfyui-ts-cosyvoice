@@ -1,4 +1,22 @@
-modelscope
+# ONE MORE COMMAND IS NEEDED AFTER THIS FILE. Install an ONNX Runtime:
+#
+#     pip install onnxruntime-gpu      # NVIDIA GPU (CUDA 13 needs 1.27 or newer)
+#     pip install onnxruntime          # CPU only, or Apple Silicon
+#
+# It is not listed below on purpose. `onnxruntime` and `onnxruntime-gpu` are two
+# separate distributions that both provide the module named `onnxruntime`, and ONNX
+# Runtime supports exactly one of them per environment. Listing the CPU build here
+# would install it next to a user's existing onnxruntime-gpu, and which one then
+# wins is undefined — so the pack asks rather than decides. If it is missing, the
+# loader says exactly this instead of failing obscurely, and if CUDA is expected but
+# unavailable it says that too rather than quietly running the speech tokenizer on
+# the CPU.
+#
+# torch and torchaudio are likewise absent: ComfyUI installs them as a matched pair
+# built against a specific CUDA/ROCm/MPS runtime, and a version line here lets pip
+# replace that build. ComfyUI cannot start without them, so there is nothing to
+# guard against.
+
 huggingface_hub
 transformers>=4.40.0
 soundfile>=0.12.0
@@ -23,7 +41,6 @@ matplotlib>=3.7.0
 # 2.5, and would be the wrong thing to constrain in a shared environment.
 numpy>=1.24.0
 tqdm
-onnxruntime>=1.18.0
 requests
 HyperPyYAML>=1.2.0
 ruamel.yaml<0.18
@@ -57,6 +74,13 @@ tiktoken
 # librosa — last-resort pitch shift in the voice conversion node, behind pyworld
 #   and torchaudio. Optional for the same numba reason as above.
 #     pip install librosa
+#
+# modelscope — only needed to download from ModelScope instead of HuggingFace.
+#   HuggingFace is the default and serves the same files, checked against the
+#   same hashes in model_manifest.json, so this is a mirror rather than a
+#   second source of truth. Selecting ModelScope without it gives an error
+#   that says exactly this.
+#     pip install modelscope
 #
 # pyworld — the formant-preserving (WORLD) pitch shift in the voice conversion
 #   node. Without it the node falls back to a phase vocoder and logs which path

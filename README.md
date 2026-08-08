@@ -7,7 +7,7 @@
 **Клонируйте голос. Меняйте эмоции. Локализуйте на 9 языков.**
 **Соберите многоголосый диалог одним нодом — прямо в ComfyUI.**
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](./CHANGELOG.md)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
@@ -60,17 +60,41 @@
 
 ---
 
-## ⚡ Быстрый старт за 4 шага
+## ⚡ Быстрый старт за 5 шагов
 
 ```bash
 # 1. Установите зависимости (внутри ComfyUI Python)
 pip install -r requirements.txt
 ```
 
+```bash
+# 2. Установите ОДИН ONNX Runtime — на выбор, не оба
+pip install onnxruntime-gpu
+```
+
+> [!IMPORTANT]
+> ONNX Runtime намеренно **не** входит в `requirements.txt`. `onnxruntime` и
+> `onnxruntime-gpu` — два разных дистрибутива, которые предоставляют один и тот же
+> модуль, и ONNX Runtime поддерживает только один вариант в окружении. Если бы пак
+> требовал CPU-сборку, она встала бы рядом с вашей `onnxruntime-gpu`, и какая из них
+> победит — не определено.
+>
+> - **NVIDIA GPU:** `pip install onnxruntime-gpu` (для CUDA 13 нужна версия 1.27+)
+> - **CPU или Apple Silicon:** `pip install onnxruntime`
+>
+> Если ORT не установлен, загрузчик скажет об этом прямо. А если torch видит CUDA,
+> но у ORT нет `CUDAExecutionProvider`, вы получите предупреждение — иначе ONNX
+> Runtime молча уходит на CPU, и кодирование референсного аудио выполняется на
+> процессоре при наличии GPU.
+>
+> `torch` и `torchaudio` тоже не объявлены: их ставит сам ComfyUI согласованной
+> парой под конкретную сборку CUDA/ROCm/MPS, и строка с версией в паке позволила бы
+> pip эту сборку заменить.
+
 ```text
-# 2. Перезапустите ComfyUI
-# 3. Найдите ноды в категории "TS CosyVoice3" через Add Node → search
-# 4. Постройте граф:
+# 3. Перезапустите ComfyUI
+# 4. Найдите ноды в категории "TS CosyVoice3" через Add Node → search
+# 5. Постройте граф:
 
    ┌─────────────────────┐         ┌──────────────────────┐         ┌──────────┐
    │ TS CosyVoice        │  model  │ TS CosyVoice         │  audio  │ Save     │
@@ -434,7 +458,7 @@ ComfyUI/
 
 - 🏠 **Репозиторий:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Модель:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **Лицензия:** [MIT](./LICENSE) (vendored код в `cosyvoice/` и `matcha/` распространяется под собственными лицензиями — Apache-2.0 и MIT соответственно).
+- 📜 **Лицензия:** [MIT](./LICENSE) — покрывает только код этого пакета. Vendored код в `cosyvoice/` (Apache-2.0) и `matcha/` (MIT, другой правообладатель) остаётся под своими лицензиями: полные тексты и атрибуция — в [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) и [`licenses/`](./licenses/).
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Сообщество:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 
@@ -492,17 +516,40 @@ Save your favourite voices once — reuse them forever.
 
 ---
 
-## ⚡ Quick start in 4 steps
+## ⚡ Quick start in 5 steps
 
 ```bash
 # 1. Install dependencies (use ComfyUI's Python)
 pip install -r requirements.txt
 ```
 
+```bash
+# 2. Install ONE ONNX Runtime - pick a side, not both
+pip install onnxruntime-gpu
+```
+
+> [!IMPORTANT]
+> ONNX Runtime is deliberately **not** in `requirements.txt`. `onnxruntime` and
+> `onnxruntime-gpu` are separate distributions that provide the same module, and ONNX
+> Runtime supports exactly one variant per environment. Requiring the CPU build here
+> would install it beside your `onnxruntime-gpu` and leave which one wins undefined.
+>
+> - **NVIDIA GPU:** `pip install onnxruntime-gpu` (CUDA 13 needs 1.27 or newer)
+> - **CPU or Apple Silicon:** `pip install onnxruntime`
+>
+> If it is missing, the loader says so plainly. And if torch reports CUDA while ONNX
+> Runtime has no `CUDAExecutionProvider`, you get a warning — otherwise ONNX Runtime
+> silently falls back to the CPU and encodes your reference audio there on a machine
+> that has a GPU.
+>
+> `torch` and `torchaudio` are absent for the same reason: ComfyUI installs them as a
+> matched pair built for a specific CUDA/ROCm/MPS runtime, and a version specifier
+> here would let pip replace that build.
+
 ```text
-# 2. Restart ComfyUI
-# 3. Search "TS CosyVoice" in the Add Node menu
-# 4. Build your graph:
+# 3. Restart ComfyUI
+# 4. Search "TS CosyVoice" in the Add Node menu
+# 5. Build your graph:
 
    ┌─────────────────────┐         ┌──────────────────────┐         ┌──────────┐
    │ TS CosyVoice        │  model  │ TS CosyVoice         │  audio  │ Save     │
@@ -866,7 +913,7 @@ ComfyUI/
 
 - 🏠 **Repository:** https://github.com/AlexYez/comfyui-ts-cosyvoice
 - 🤗 **Model:** [FunAudioLLM/Fun-CosyVoice3-0.5B-2512](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-- 📜 **License:** [MIT](./LICENSE) (vendored code under `cosyvoice/` and `matcha/` keeps its own licenses — Apache-2.0 and MIT respectively).
+- 📜 **License:** [MIT](./LICENSE) — covers this package's own code only. The vendored trees keep their own licences: `cosyvoice/` is Apache-2.0 and `matcha/` is MIT under a different copyright holder. Full texts and attribution are in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) and [`licenses/`](./licenses/).
 - 🏗️ **Upstream:** [CosyVoice](https://github.com/FunAudioLLM/CosyVoice) by Alibaba
 - 💬 **Community:** [Timesaver VFX](https://timesavervfx.com/comfyui/)
 

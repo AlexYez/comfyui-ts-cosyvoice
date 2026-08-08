@@ -51,7 +51,10 @@ def get_whisper_model(log_prefix: str):
         # CosyVoice runtime could import without numba. It provides the mel
         # front-end only -- there is no decoder behind it. Say that plainly
         # instead of letting `whisper.load_model` fail with an AttributeError.
-        from utils.ts_runtime_shims import is_shimmed
+        try:
+            from .ts_runtime_shims import is_shimmed
+        except ImportError:
+            from ts_runtime_shims import is_shimmed
 
         if is_shimmed("whisper"):
             LOGGER.warning(

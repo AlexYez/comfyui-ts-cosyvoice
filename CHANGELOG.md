@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-08
+
+Supply-chain and shared-environment release, from an external audit. Nothing about
+synthesis changed; what changed is what the pack installs into somebody else's
+ComfyUI, and what it is willing to load and execute.
+
+Every finding below was reproduced before it was fixed, and two turned out to be
+worse or narrower than reported.
+
+### Fixed — the pack no longer claims ownership of its host's runtime
+- **`torch` and `torchaudio` are no longer declared as dependencies.** ComfyUI
+  installs them as a matched pair built against a specific CUDA/ROCm/MPS runtime, and
+  a `torch>=2.0.0` line lets pip decide that pair should be replaced — which is how
+  adding a custom node turns a working CUDA install into a CPU one. ComfyUI cannot
+  start without them, so there was nothing to guard against in the first place.
+- **`onnxruntime` is no longer required either.** `onnxruntime` and `onnxruntime-gpu`
+  are separate distributions that both provide the module named `onnxruntime`, and
+  ONNX Runtime supports exactly one variant per environment. Requiring the CPU build
+  installed it beside a user's GPU build, leaving which one wins undefined. It is now
+  the extras `onnx-cpu` / `onnx-cuda`, and both manifests plus the README say which
+  to pick.
+- **The silent CPU fallback is now loud.** `cosyvoice/cli/frontend.py` asks for
+  `CUDAExecutionProvider` whenever torch reports CUDA. ONNX Runtime does not treat a
+  missing provider as an error — it falls back to the CPU and continues, so the speech
+  tokenizer encodes every reference clip on the CPU of a GPU machine with only ORT's
+  own warning to show for it. `utils/ts_onnx_providers.py` reports the providers it
+  actually has, raises a pack-level error naming the package to install when ORT is
+  absent, and warns once per process when CUDA was expected and is not there. Running
+  this on the development machine immediately found exactly that case: torch with CUDA
+  13.0 alongside CPU-only `onnxruntime` 1.26.0.
+- `requires-python = ">=3.10"` is declared, and CI now tests that floor as well as
+  Windows, which it did not cover before.
+- **`modelscope` is optional.** HuggingFace is the default source and serves the same
+  files under the same hashes, so ModelScope is a mirror rather than a second source
+  of truth. Selecting it without the package gives an error that says so.
+
+### Fixed — the model is pinned and its contents are verified
+- **The model was fetched from a mutable branch and then executed.** Downloads used
+  `revision='main'` / `revision='master'`, and the resulting `cosyvoice3.yaml` goes to
+  HyperPyYAML, whose `!new:` and `!apply:` tags import modules and construct objects.
+  The previous checks — file sizes, ZIP CRCs, "does ONNX open this" — establish that a
+  download finished, not that it is the download that was vetted.
+  HuggingFace is now pinned to commit `29e01c4e`, and `model_manifest.json` records
+  sha256 for all 15 files the pack reads.
+- **ModelScope cannot be pinned, and the manifest says so** instead of leaving a bare
+  `master` looking like an oversight: its API reports `ModelRevisions: None` and
+  `master` is the only branch. All 10 files both mirrors expose hashes for match
+  byte-for-byte, so the manifest covers ModelScope too — the hashes are the control
+  there, not the revision.
+- Verification splits by consequence. Executed and parsed files (`cosyvoice3.yaml`,
+  the tokenizer configs) are **refused** on mismatch — measured at 0.06 s, so it runs
+  on every load. Weights and ONNX graphs **warn and continue**: 9.74 GB hashes in
+  7.7 s, so it is recorded in the existing `.ts_validation.json` sidecar and not
+  repeated, and someone whose copy predates the pinned revision keeps a working
+  install rather than being locked out.
+- A refusal deliberately deletes nothing. `get_model_path` treats a validation *error
+  string* as grounds to wipe the model directory and re-download, so a hash mismatch
+  is raised as `ModelIntegrityError` on a separate path — an integrity check must not
+  delete gigabytes belonging to a user whose model is merely newer.
+- Verified by tampering: appending `!name:os.system` to a copy of `cosyvoice3.yaml` is
+  refused with the file named, and flipping a single newline is caught.
+
+### Fixed — the pack was shadowing two ComfyUI core modules
+- `__init__.py` prepended the pack root to `sys.path`, and the pack contains `utils/`
+  and `nodes/` while ComfyUI's root contains `utils/` and `nodes.py`. Measured in
+  ComfyUI's own interpreter, `import utils` and `import nodes` resolved to *ours*
+  after the pack loaded. It went unnoticed only because ComfyUI imports both before
+  custom nodes load; any node loading later and importing them fresh would have got
+  the pack's. The root is now **appended**, which leaves `cosyvoice`/`matcha`
+  resolvable — nothing else defines those — and the core names alone.
+- Four intra-package imports written as `from utils.X import Y` depended on that
+  shadowing and would have broken model loading outright once it was removed. They now
+  use the relative-first pattern the rest of the package already used. Verified by
+  loading the pack the way ComfyUI loads it: 7 nodes registered, both core modules
+  intact, vendored runtime imports.
+
+### Fixed — models are released from VRAM
+- `_MODEL_CACHE` had no eviction, so every distinct precision or checkpoint
+  combination kept its own multi-gigabyte copy for the process lifetime. One CosyVoice
+  model is now kept resident: the previous one is released *before* the next loads, so
+  the peak is one model rather than two. `unload_cosyvoice_model()` frees explicitly —
+  measured dropping VRAM from 3.44 GB to 0.01 GB.
+- The cached dict is **not** cleared on eviction. An earlier version of this change did
+  clear it, and the existing test suite caught what that means: it is the same object
+  that flows between nodes as `COSYVOICE_MODEL`, so emptying it turns a downstream
+  synthesis node's model into `{}` mid-run.
+
+### Added — third-party licence notices, required before further distribution
+- The repository shipped only its own MIT licence while redistributing Apache-2.0 and
+  MIT code belonging to others. Added `THIRD_PARTY_NOTICES.md` plus full texts in
+  `licenses/`: Apache-2.0 for `cosyvoice/` and the original MIT with its copyright
+  line for `matcha/`. The notices list all twelve copyright holders found in the
+  vendored sources — Alibaba, Antgroup, Mobvoi, Johns Hopkins and Shigeki Karita, the
+  ESPnet/WeNet lineage the transformer code descends from.
+- The exact upstream commits are **not recorded**, and the notices say so rather than
+  printing an unverified hash: both trees arrived in one commit with no revision noted.
+  What can be shown is that they are unmodified — `git diff` against that import is
+  empty and no `TS-PATCH` marker exists — and a test keeps that claim honest.
+
+### Security hygiene
+- All GitHub Actions are pinned to full commit SHAs. `Comfy-Org/publish-node-action@main`
+  was a moving branch running with `REGISTRY_ACCESS_TOKEN`.
+- Log and error strings no longer use an em-dash, which renders as `?` in a
+  legacy-codepage Windows console. Tooltips keep theirs — those are delivered to the
+  browser as UTF-8.
+
+### Notes
+- `diffusers`, `hydra-core` and `pydantic` are declared but appear nowhere in the
+  import graph (`diffusers` only in comments). They are left in place: removing a
+  dependency can only be validated by exercising all seven nodes, and only voice
+  conversion was run.
+
 ## [1.2.0] - 2026-08-08
 
 Two things at once: audio quality in voice conversion, and the pack becoming

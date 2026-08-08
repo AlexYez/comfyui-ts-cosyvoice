@@ -11,7 +11,25 @@ NODE_CLASS_MAPPINGS / NODE_DISPLAY_NAME_MAPPINGS dicts were dropped in the
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(__file__))
+# The vendored CosyVoice and Matcha-TTS trees import each other as top-level
+# packages (`from cosyvoice.cli...`, `from matcha.models...`), exactly as upstream
+# writes them, so the pack root has to be importable.
+#
+# Appended, never prepended. This directory contains `utils/` and `nodes/`, and
+# ComfyUI's own root contains `utils/` and `nodes.py`. Prepending made `import utils`
+# and `import nodes` resolve to *ours* for everything imported after this pack:
+#
+#   before: utils -> ComfyUI/utils/__init__.py      nodes -> ComfyUI/nodes.py
+#   after:  utils -> custom_nodes/.../utils/__init__.py
+#           nodes -> custom_nodes/.../nodes/__init__.py
+#
+# It went unnoticed because ComfyUI imports both before loading custom nodes, so the
+# shadowed names were already in sys.modules. Any custom node loaded after this one
+# that imported them fresh would have got ours. Appending keeps `cosyvoice`/`matcha`
+# resolvable — nothing else defines those — while leaving the core names alone.
+_PACK_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _PACK_ROOT not in sys.path:
+    sys.path.append(_PACK_ROOT)
 
 from comfy_api.v0_0_2 import ComfyExtension
 
@@ -40,7 +58,7 @@ except ImportError:
 
 # Single source of truth for the pack version at runtime. Kept in lockstep with
 # pyproject.toml (and the README badge) by tests/test_version_consistency.py.
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Serves the generated embedded help pages at
 # /extensions/comfyui-ts-cosyvoice/docs/<node_id>/<locale>.md, which is where the

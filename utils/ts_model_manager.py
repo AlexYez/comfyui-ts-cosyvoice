@@ -15,9 +15,21 @@ import torch
 try:
     from .ts_cosyvoice_adapter import get_runtime_device
     from .ts_logging import get_logger, log_banner, log_exception
+    from .ts_model_manifest import (
+        pinned_revision,
+        verify_config_files,
+        verify_weight_files,
+    )
+    from .ts_onnx_providers import report_provider_status, require_onnxruntime
 except (ImportError, ValueError):
     from ts_cosyvoice_adapter import get_runtime_device
     from ts_logging import get_logger, log_banner, log_exception
+    from ts_model_manifest import (
+        pinned_revision,
+        verify_config_files,
+        verify_weight_files,
+    )
+    from ts_onnx_providers import report_provider_status, require_onnxruntime
 
 # Global model cache. Module-level rather than class-level: V3 node classes are
 # locked, so `cls.cache = ...` would raise.
@@ -205,7 +217,7 @@ VALIDATION_RECORD_NAME = ".ts_validation.json"
 
 # What the deep pass actually verifies. Recorded verbatim so the file states what
 # was checked rather than implying a stronger guarantee than was made.
-_DEEP_CHECKS = ["torch_archive_crc", "onnx_session_load"]
+_DEEP_CHECKS = ["torch_archive_crc", "onnx_session_load", "sha256_weights_manifest"]
 
 
 def _file_signature(model_root: str, file_names: "set[str]") -> "dict[str, list[int]]":
@@ -314,6 +326,11 @@ def validate_model_root(model_root: str, model_version: str) -> str | None:
         if onnx_error:
             return onnx_error
 
+    # Weights and ONNX graphs against the manifest. Several gigabytes, so it belongs
+    # in the once-per-file-set pass rather than on every load. Warns and continues by
+    # design — see utils/ts_model_manifest.py for why weights are not a hard failure.
+    verify_weight_files(model_root, model_version)
+
     _write_validation_record(model_root, model_version, signature)
     return None
 
@@ -346,21 +363,40 @@ def ensure_runtime_support_files(model_root: str):
             LOGGER.warning("[TS CosyVoice Model Manager] Could not create %s: %s", spk2info_path, e)
 
 
-def download_model_modelscope(model_id: str, local_dir: str) -> str:
-    """Download model from ModelScope"""
+def download_model_modelscope(model_id: str, local_dir: str, revision: str = "master") -> str:
+    """
+    Download model from ModelScope.
+
+    ModelScope publishes no immutable ref for this repository — its API reports
+    ``ModelRevisions: None`` and ``master`` is the only branch — so unlike the
+    HuggingFace path this cannot be pinned to a commit. What makes the result
+    trustworthy is the sha256 verification that follows, not the revision.
+    """
     log_banner(
         LOGGER,
         "[TS CosyVoice Model Manager] Downloading from ModelScope",
         Model=model_id,
+        Revision=revision,
         Target=local_dir,
     )
 
     try:
-        from modelscope import snapshot_download
+        try:
+            from modelscope import snapshot_download
+        except ImportError as exc:
+            raise RuntimeError(
+                "[TS CosyVoice Model Manager] The ModelScope download source needs the "
+                "`modelscope` package, which is not installed. Either set "
+                "download_source to HuggingFace (the default, and what this pack "
+                "requires), or install it:\n"
+                '    pip install "comfyui-ts-cosyvoice[modelscope]"\n'
+                "It is optional because ModelScope is a mirror: HuggingFace serves the "
+                "same files, verified against the same hashes."
+            ) from exc
 
         model_path = snapshot_download(
             model_id=model_id,
-            revision='master',
+            revision=revision,
             cache_dir=get_download_cache_directory(),
             local_dir=local_dir,
             local_files_only=False,
@@ -381,12 +417,19 @@ def download_model_modelscope(model_id: str, local_dir: str) -> str:
         raise
 
 
-def download_model_huggingface(model_id: str, local_dir: str) -> str:
-    """Download model from HuggingFace"""
+def download_model_huggingface(model_id: str, local_dir: str, revision: str = "main") -> str:
+    """
+    Download model from HuggingFace.
+
+    ``revision`` is the full commit hash recorded in ``model_manifest.json``, not a
+    branch name. Fetching from ``main`` meant the bytes could change under us between
+    two installs, and ``cosyvoice3.yaml`` is executed by HyperPyYAML once loaded.
+    """
     log_banner(
         LOGGER,
         "[TS CosyVoice Model Manager] Downloading from HuggingFace",
         Model=model_id,
+        Revision=revision,
         Target=local_dir,
     )
 
@@ -395,7 +438,7 @@ def download_model_huggingface(model_id: str, local_dir: str) -> str:
 
         model_path = snapshot_download(
             repo_id=model_id,
-            revision='main',
+            revision=revision,
             cache_dir=get_download_cache_directory(),
             local_dir=local_dir,
             local_files_only=False,
@@ -444,22 +487,33 @@ def get_model_path(
             LOGGER.warning("[TS CosyVoice Model Manager] Clearing invalid model directory: %s", model_dir)
             clear_model_directory(model_dir)
         else:
+            # Deliberately outside the validation_error channel above: that channel
+            # wipes the model directory and re-downloads. A hash mismatch must not
+            # delete gigabytes of someone's working install, so verify_config_files
+            # raises instead, leaving everything on disk untouched.
+            checked = verify_config_files(existing_root, model_version)
             log_banner(
                 LOGGER,
                 "[TS CosyVoice Model Manager] Model already exists",
                 Path=existing_root,
+                Verified=(
+                    f"{checked} config files match model_manifest.json"
+                    if checked
+                    else "no manifest entries - contents not verified"
+                ),
             )
             return existing_root
 
     os.makedirs(model_dir, exist_ok=True)
 
     def _download_from_source(source_name: str) -> str:
+        revision = pinned_revision(model_version, source_name)
         if source_name == "ModelScope":
             model_id = config["modelscope_id"]
-            download_model_modelscope(model_id, model_dir)
+            download_model_modelscope(model_id, model_dir, revision=revision or "master")
         else:
             model_id = config["huggingface_id"]
-            download_model_huggingface(model_id, model_dir)
+            download_model_huggingface(model_id, model_dir, revision=revision or "main")
 
         resolved_root = find_model_root(model_dir, model_version)
         if not resolved_root:
@@ -468,6 +522,10 @@ def get_model_path(
         validation_error = validate_model_root(resolved_root, model_version)
         if validation_error:
             raise RuntimeError(f"Downloaded model validation failed: {validation_error}")
+        # A fresh download at a pinned revision should match the manifest exactly. If
+        # it does not, trying the other mirror is a reasonable next step, so this is
+        # left to propagate into the alternate-source fallback below.
+        verify_config_files(resolved_root, model_version)
         return resolved_root
 
     # Download model
@@ -508,19 +566,31 @@ def load_cosyvoice_model(
         Path=model_path,
     )
 
+    # Before the vendored frontend reaches its own module-level `import onnxruntime`:
+    # raise a pack-level error naming the package to install, and warn when torch has
+    # CUDA but ONNX Runtime cannot offer the CUDA provider. ONNX Runtime treats a
+    # missing provider as a silent fall back to CPU, which would put the speech
+    # tokenizer on the CPU of a GPU machine with nothing but ORT's own warning to say
+    # so.
+    require_onnxruntime()
+    report_provider_status()
+
     try:
         # Import from vendored cosyvoice package (bundled with this node pack)
         import sys
         vendored_path = os.path.join(os.path.dirname(__file__), "..")
         if vendored_path not in sys.path:
-            sys.path.insert(0, vendored_path)
+            sys.path.append(vendored_path)
 
         # The vendored tree imports whisper and librosa.filters at module level
         # purely to compute mel spectrograms, and both pull numba, which refuses
         # to load against NumPy 2.2+. Substitute the pack's own mel front-end for
         # whichever of them cannot import, before the vendored import runs. A
         # no-op where they import fine. See utils/ts_runtime_shims.py.
-        from utils.ts_runtime_shims import install_cosyvoice_import_shims
+        try:
+            from .ts_runtime_shims import install_cosyvoice_import_shims
+        except ImportError:
+            from ts_runtime_shims import install_cosyvoice_import_shims
 
         install_cosyvoice_import_shims()
 
@@ -657,6 +727,119 @@ def apply_rl_llm_checkpoint(model: Any, model_root: str, device: "torch.device |
     )
 
 
+def _torch_modules_of(model: Any) -> "list[torch.nn.Module]":
+    """
+    The nn.Modules a loaded CosyVoice runtime owns, so they can be moved off the GPU.
+
+    Walks one level into the runtime and its inner model rather than assuming the
+    attribute layout: upstream has moved these around before, and a rename should
+    cost a less thorough unload, not an AttributeError during cleanup.
+    """
+    found: list[torch.nn.Module] = []
+    seen: set[int] = set()
+
+    def collect(container: Any) -> None:
+        if container is None:
+            return
+        for name in dir(container):
+            if name.startswith("__"):
+                continue
+            try:
+                value = getattr(container, name)
+            except Exception:
+                continue
+            if isinstance(value, torch.nn.Module) and id(value) not in seen:
+                seen.add(id(value))
+                found.append(value)
+
+    collect(model)
+    collect(getattr(model, "model", None))
+    return found
+
+
+def unload_cosyvoice_model(cache_key: str | None = None) -> int:
+    """
+    Drop cached models and give their VRAM back.
+
+    Args:
+        cache_key: evict just this entry, or every entry when None.
+
+    Returns:
+        How many cache entries were evicted.
+
+    The cache had no eviction at all, so every distinct precision or checkpoint
+    combination accumulated its own multi-gigabyte copy for the lifetime of the
+    process; toggling fp16 twice meant three resident models.
+
+    Caveat worth stating plainly: this moves the modules to CPU, so a *different*
+    node still holding this exact model object would find it on the CPU. ComfyUI
+    executes one prompt at a time and the loader runs before the synthesis nodes it
+    feeds, so in practice the evicted model is one nothing is using. A graph with two
+    loader nodes configured differently and both feeding synthesis in the same run is
+    the case to be aware of.
+    """
+    # Detach the entries under the lock, then do the slow part outside it. Moving
+    # several gigabytes to CPU is I/O, and this lock also gates handing out per-key
+    # locks — holding it across the transfer would stall an unrelated load.
+    with _MODEL_CACHE_LOCK_REGISTRY:
+        keys = [cache_key] if cache_key is not None else list(_MODEL_CACHE)
+        detached = [(key, _MODEL_CACHE.pop(key)) for key in keys if key in _MODEL_CACHE]
+
+    evicted = 0
+    for key, model_info in detached:
+        evicted += 1
+        for module in _torch_modules_of(model_info.get("model")):
+            try:
+                module.to("cpu")
+            except Exception as exc:
+                LOGGER.warning(
+                    "[TS CosyVoice Model Manager] Could not move a module to CPU "
+                    "while unloading %s: %s",
+                    key,
+                    exc,
+                )
+        # The dict is deliberately left intact rather than cleared. It is the same
+        # object get_cached_model handed to the loader node, and it flows down the
+        # graph as COSYVOICE_MODEL — emptying it would turn a downstream synthesis
+        # node's model into `{}` mid-run, i.e. a KeyError instead of, at worst, a
+        # model that is now on the CPU. Dropping the cache's own reference is enough
+        # to free anything nobody else is holding.
+        LOGGER.info("[TS CosyVoice Model Manager] Unloaded cached model: %s", key)
+
+    if evicted:
+        import gc
+
+        gc.collect()
+        try:
+            import comfy.model_management as mm
+
+            mm.soft_empty_cache()
+        except Exception:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    return evicted
+
+
+def _evict_other_models(keep_key: str) -> None:
+    """
+    Enforce one resident CosyVoice model, freeing VRAM *before* the next one loads.
+
+    Order matters: releasing first is the whole point. Freeing afterwards would still
+    need both copies resident simultaneously, which is exactly the peak that runs a
+    card out of memory.
+    """
+    stale = [key for key in list(_MODEL_CACHE) if key != keep_key]
+    for key in stale:
+        LOGGER.info(
+            "[TS CosyVoice Model Manager] Releasing %s before loading %s "
+            "(one CosyVoice model is kept resident at a time)",
+            key,
+            keep_key,
+        )
+        unload_cosyvoice_model(key)
+
+
 def get_cached_model(
     model_version: str,
     download_source: str = "ModelScope",
@@ -716,6 +899,10 @@ def _load_and_cache_model(
     """Download, load and cache a model. Callers must hold this key's lock."""
     # Get model path (download if needed)
     model_path = get_model_path(model_version, download_source)
+
+    # Free any other resident model first, so peak usage is one model rather than
+    # two. Done after the download resolves and before the weights are loaded.
+    _evict_other_models(cache_key)
 
     # Load model
     model = load_cosyvoice_model(model_path, device, fp16=fp16)

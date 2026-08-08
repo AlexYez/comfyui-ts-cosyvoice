@@ -38,7 +38,10 @@ from __future__ import annotations
 import sys
 import types
 
-from utils.ts_logging import get_logger
+try:
+    from .ts_logging import get_logger
+except ImportError:  # loaded as a top-level module rather than as part of the package
+    from ts_logging import get_logger
 
 LOGGER = get_logger("TS CosyVoice3 Runtime")
 LOG_PREFIX = "[TS CosyVoice3 Runtime]"
@@ -95,7 +98,10 @@ def _install_whisper_shim() -> None:
     through ``get_qwen_tokenizer`` -> ``AutoTokenizer``, so it is never
     constructed. It raises if it ever is, rather than pretending.
     """
-    from utils import ts_mel
+    try:
+        from . import ts_mel
+    except ImportError:
+        import ts_mel
 
     whisper_module = _new_shim("whisper", package=True)
     whisper_module.log_mel_spectrogram = ts_mel.log_mel_spectrogram  # type: ignore[attr-defined]
@@ -135,7 +141,10 @@ def _install_librosa_filters_shim() -> None:
     only the one failing submodule is substituted, so anything else a caller
     reaches for is still genuinely librosa.
     """
-    from utils import ts_mel
+    try:
+        from . import ts_mel
+    except ImportError:
+        import ts_mel
 
     if "librosa" not in sys.modules:
         try:

@@ -35,6 +35,12 @@ jobs:
   install:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # The steps below use heredocs. Windows runners default to pwsh, where a
+        # heredoc is a syntax error, so every step is pinned to bash — which is
+        # present on all three GitHub-hosted images.
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -45,11 +51,19 @@ jobs:
             python: "3.12"
           - os: ubuntu-latest
             python: "3.12"
+          # Windows is where most ComfyUI portable installs live, and it is the one
+          # platform where pyworld does ship a wheel — so it exercises a different
+          # dependency resolution than the two above.
+          - os: windows-latest
+            python: "3.12"
+          # The floor declared in requires-python, so the floor is actually tested.
+          - os: ubuntu-latest
+            python: "3.10"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.3.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -125,6 +139,64 @@ jobs:
           numba_loaded = [m for m in sys.modules if m.split(".")[0] == "numba"]
           assert not numba_loaded, f"numba was imported: {numba_loaded[:5]}"
           print("mel front-end works with no numba in the import graph")
+          PY
+
+      - name: Check the ONNX Runtime diagnostics, absent then present
+        # requirements.txt no longer installs an ONNX Runtime: `onnxruntime` and
+        # `onnxruntime-gpu` both provide the same module and ORT supports one per
+        # environment, so the choice is the user's. That makes the two messages this
+        # step checks the only thing standing between a user and an obscure failure.
+        run: |
+          python - <<'PY'
+          from utils.ts_onnx_providers import available_providers, report_provider_status, require_onnxruntime
+
+          assert available_providers() == [], "no ONNX Runtime should be installed yet"
+          try:
+              require_onnxruntime()
+          except RuntimeError as exc:
+              assert "onnxruntime-gpu" in str(exc) and "onnxruntime" in str(exc)
+              print("absent  -> names both packages, as intended")
+          else:
+              raise AssertionError("a missing ONNX Runtime must raise")
+
+          status = report_provider_status(force=True)
+          assert status["providers"] == [] and status["cuda_available"] is False
+          PY
+
+          pip install onnxruntime
+
+          python - <<'PY'
+          from utils.ts_onnx_providers import report_provider_status, require_onnxruntime
+
+          providers = require_onnxruntime()
+          assert "CPUExecutionProvider" in providers, providers
+          status = report_provider_status(force=True)
+          # These runners have no CUDA, so nothing should be reported as degraded:
+          # the warning must fire only when torch has CUDA and ORT cannot match it.
+          assert status["cuda_expected"] is False
+          assert status["degraded"] is False, "a CPU-only runner must not look degraded"
+          print(f"present -> providers {providers}, degraded={status['degraded']}")
+          PY
+
+      - name: Verify the model manifest is self-consistent
+        # Not a network check -- it only asserts the shipped manifest is well formed
+        # and that the config/weights split is what the verifier expects.
+        run: |
+          python - <<'PY'
+          from utils.ts_model_manifest import CONFIG_POLICY, WEIGHTS_POLICY, manifest_files, pinned_revision
+
+          version = "Fun-CosyVoice3-0.5B"
+          revision = pinned_revision(version, "HuggingFace")
+          assert revision and len(revision) == 40 and revision.isalnum(), revision
+
+          config = manifest_files(version, CONFIG_POLICY)
+          weights = manifest_files(version, WEIGHTS_POLICY)
+          assert "cosyvoice3.yaml" in config, "the executed config must be verified"
+          assert config and weights
+          for name, spec in {**config, **weights}.items():
+              assert len(spec["sha256"]) == 64, name
+              assert spec["size"] > 0, name
+          print(f"manifest: {len(config)} config + {len(weights)} weights, HF pinned to {revision[:12]}")
           PY
 
       - name: Smoke-check the DSP helpers

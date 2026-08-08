@@ -54,6 +54,7 @@ ignore = [
 # Tests import fixtures after an importorskip guard on purpose.
 "tests/*.py" = ["E402"]
 "tests/**/*.py" = ["E402"]
-# The doc generator is a command-line script; its progress output belongs on
+# The generators are command-line scripts; their progress output belongs on
 # stdout, not in the ComfyUI log.
 "tools/generate_node_docs.py" = ["T201"]
+"tools/generate_model_manifest.py" = ["T201"]

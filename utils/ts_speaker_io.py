@@ -220,7 +220,7 @@ def load_speaker_preset(speaker_name: str, device: Any = None) -> Dict[str, Any]
     except Exception as exc:
         raise RuntimeError(
             f"[TS CosyVoice3 Speaker IO] Could not load speaker preset "
-            f"{os.path.basename(pt_path)}: {exc}. Presets must contain only tensors — "
+            f"{os.path.basename(pt_path)}: {exc}. Presets must contain only tensors - "
             f"re-create this preset with the TS CosyVoice Save Speaker node."
         ) from exc
 
