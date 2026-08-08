@@ -101,12 +101,21 @@ NODE_DOCS: dict[str, dict] = {
             ),
             "device": (
                 "Preferred compute device, best effort. The CosyVoice runtime "
-                "places the model itself and uses the GPU when one is available, "
-                "so this request may not be honoured literally."
+                "implements CUDA and CPU only — there is no Metal/MPS path in it, "
+                "so on Apple Silicon the model runs on the CPU whichever option "
+                "you pick. Unsupported selections are reduced to CPU and the node "
+                "logs that it did so."
             ),
             "fp16": (
-                "Load in half precision on supported accelerators to cut VRAM "
-                "use. Ignored without CUDA."
+                "Load in half precision to cut VRAM use. Requires CUDA: without "
+                "it the runtime falls back to FP32 on its own, Apple Silicon "
+                "included."
+            ),
+            "llm_checkpoint": (
+                "Which language-model checkpoint to load. 'reinforcement-learning' "
+                "uses llm.rl.pt, the GRPO post-trained variant that ships in the "
+                "same model folder and scores better on the published metrics. "
+                "Switching reloads the model."
             ),
         },
         "outputs": {
@@ -123,6 +132,10 @@ NODE_DOCS: dict[str, dict] = {
             "expensive part runs once rather than on every ComfyUI start.",
             "The device selector is a request, not a guarantee — read the node's "
             "log line to see where the model actually ended up.",
+            "**macOS:** the CosyVoice runtime has no Metal/MPS backend, so on "
+            "Apple Silicon everything runs on the CPU. The pack works, but voice "
+            "conversion of a long recording will be slow; keep source audio short "
+            "while you are finding settings.",
         ],
         "notes_ru": [
             "Веса кладутся в `ComfyUI/models/cosyvoice/<model_version>/` "
@@ -132,6 +145,10 @@ NODE_DOCS: dict[str, dict] = {
             "часть выполняется один раз, а не при каждом старте ComfyUI.",
             "Выбор устройства — это пожелание, а не гарантия: фактическое "
             "размещение модели видно в строке лога этой ноды.",
+            "**macOS:** в рантайме CosyVoice нет бэкенда Metal/MPS, поэтому на "
+            "Apple Silicon всё считается на CPU. Пак работает, но voice "
+            "conversion длинной записи будет медленным — подбирайте настройки на "
+            "коротком фрагменте.",
         ],
     },
     "TS_CosyVoice3_Instruct2": {
@@ -332,6 +349,27 @@ NODE_DOCS: dict[str, dict] = {
                 "converting between a low and a high voice."
             ),
             "seed": _SEED_EN,
+            "diffusion_steps": (
+                "Euler steps taken by the flow decoder. 10 is the model's own "
+                "default and favours speed; 25-40 resolves more detail and costs "
+                "proportionally more time. Raise this before anything else if the "
+                "result sounds smeared."
+            ),
+            "guidance_strength": (
+                "Classifier-free guidance strength. 0.7 is the shipped "
+                "configuration; higher follows the target voice more closely but "
+                "increases the risk of artefacts, lower is safer and blander."
+            ),
+            "normalize_output": (
+                "Scale the result to a fixed level so different reference clips do "
+                "not produce wildly different output volumes."
+            ),
+            "target_rms_dbfs": (
+                "Level to normalise to, when normalize_output is on. This is RMS, "
+                "not LUFS — it is not an EBU R128 loudness measurement. Peaks are "
+                "held below -1 dBFS, so a very high target is given up rather than "
+                "clipped."
+            ),
         },
         "outputs": {
             "audio": {
@@ -340,9 +378,18 @@ NODE_DOCS: dict[str, dict] = {
             },
         },
         "notes_en": [
-            "Source audio longer than 24 seconds is split into chunks. The split "
-            "prefers a pause so it does not land mid-word, and the converted "
-            "chunks are rejoined with a short crossfade.",
+            "Source audio longer than 24 seconds is split into overlapping "
+            "chunks. The split prefers a pause so it does not land mid-word, each "
+            "chunk re-reads one second of its predecessor so the voice does not "
+            "restart at the boundary, and the converted chunks are aligned on that "
+            "overlap before being crossfaded together.",
+            "Pitch shifting rescales the fundamental with the WORLD vocoder, which "
+            "leaves the formants where they are — so a large shift does not also "
+            "make the speaker sound smaller or larger. This needs the optional "
+            "`pyworld` package, which is not installed by default because it "
+            "publishes wheels for Windows only; without it the node falls back to "
+            "a phase vocoder and logs which path it took. `pip install pyworld` "
+            "enables it (macOS needs the Xcode Command Line Tools to build it).",
             "This is the slowest node in the pack. On CPU a ten-minute file can "
             "take hours — run it on a GPU.",
             "Cancel stops it between chunks, so a long job aborts within roughly "
@@ -352,9 +399,18 @@ NODE_DOCS: dict[str, dict] = {
             "works; a split may land mid-word.",
         ],
         "notes_ru": [
-            "Исходное аудио длиннее 24 секунд режется на чанки. Точка реза по "
-            "возможности выбирается в паузе, чтобы не попасть в середину слова, "
-            "а преобразованные чанки склеиваются коротким кроссфейдом.",
+            "Исходное аудио длиннее 24 секунд режется на чанки с перекрытием. "
+            "Точка реза по возможности выбирается в паузе, каждый чанк "
+            "перечитывает секунду предыдущего, чтобы голос не начинался заново на "
+            "стыке, а преобразованные чанки выравниваются по этому перекрытию и "
+            "склеиваются кроссфейдом.",
+            "Сдвиг высоты тона масштабирует основной тон вокодером WORLD, оставляя "
+            "форманты на месте — поэтому большой сдвиг не делает говорящего "
+            "«меньше» или «больше». Для этого нужен опциональный пакет `pyworld`, "
+            "который по умолчанию не ставится: он публикует колёса только под "
+            "Windows. Без него нода использует фазовый вокодер и пишет в лог, "
+            "какой путь выбран. Включается через `pip install pyworld` (на macOS "
+            "потребуются Xcode Command Line Tools для сборки).",
             "Это самая медленная нода пака. На CPU десятиминутный файл может "
             "считаться часами — запускайте на GPU.",
             "Cancel останавливает её между чанками, поэтому долгая задача "
@@ -386,8 +442,9 @@ NODE_DOCS: dict[str, dict] = {
             "reference_audio": _REFERENCE_AUDIO_EN,
             "reference_text": (
                 "What is actually said in the reference audio. Leave it empty to "
-                "have Whisper transcribe it automatically — an accurate "
-                "transcript noticeably improves the clone."
+                "have Whisper transcribe it automatically — an accurate transcript "
+                "noticeably improves the clone. Auto-transcription needs the "
+                "ffmpeg command on PATH, which macOS does not have by default."
             ),
             "speaker_name": (
                 "File name for the preset, without extension. Must be a plain "
@@ -404,9 +461,16 @@ NODE_DOCS: dict[str, dict] = {
             _REFERENCE_AUDIO_NOTE_EN,
             "Presets are written to `ComfyUI/models/cosyvoice/speaker/`. Saving "
             "under an existing name overwrites it.",
-            "Leaving reference_text empty pulls in Whisper. The first time, that "
-            "downloads the Whisper 'base' model (about 140 MB) into "
-            "`ComfyUI/models/whisper/`.",
+            "Leaving reference_text empty pulls in Whisper, which is an optional "
+            "install: `pip install openai-whisper`. It is not required because it "
+            "depends on numba, and numba refuses to load against the NumPy that "
+            "current ComfyUI ships — making it mandatory would break the whole "
+            "pack. The first time it runs it downloads the Whisper 'base' model "
+            "(about 140 MB) into `ComfyUI/models/whisper/`.",
+            "Whisper decodes audio by running the `ffmpeg` command, so it must be "
+            "on PATH. Windows ComfyUI builds usually bundle it; **macOS does not "
+            "ship it** — `brew install ffmpeg`. Without ffmpeg the preset is still "
+            "saved, but with an empty reference text.",
             "If Whisper is missing or fails, the preset is still saved but with "
             "an empty transcript, and a warning naming the reason is written to "
             "the ComfyUI console log. Such a preset clones noticeably worse, and "
@@ -419,9 +483,16 @@ NODE_DOCS: dict[str, dict] = {
             "Пресеты пишутся в `ComfyUI/models/cosyvoice/speaker/`. Сохранение "
             "под существующим именем перезаписывает файл; нода Speaker Text To "
             "Voice это заметит и перегенерирует речь.",
-            "Пустое поле reference_text задействует Whisper. При первом "
-            "обращении скачивается модель Whisper 'base' (около 140 МБ) в "
-            "`ComfyUI/models/whisper/`.",
+            "Пустое поле reference_text задействует Whisper — это опциональная "
+            "установка: `pip install openai-whisper`. Обязательным он не сделан "
+            "потому, что зависит от numba, а numba отказывается работать с той "
+            "NumPy, которую ставит актуальный ComfyUI: жёсткая зависимость "
+            "ломала бы весь пак. При первом обращении скачивается модель Whisper "
+            "'base' (около 140 МБ) в `ComfyUI/models/whisper/`.",
+            "Whisper декодирует аудио вызовом команды `ffmpeg`, поэтому она должна "
+            "быть в PATH. В сборках ComfyUI для Windows она обычно есть; **на "
+            "macOS её нет** — `brew install ffmpeg`. Без ffmpeg пресет всё равно "
+            "сохранится, но с пустым reference_text.",
             "Если Whisper отсутствует или падает, пресет всё равно сохраняется, "
             "но с пустой расшифровкой, а причина попадает предупреждением в лог "
             "консоли ComfyUI. Такой пресет клонирует заметно хуже, и на канвасе "
@@ -503,8 +574,12 @@ NODE_DOCS: dict[str, dict] = {
             "Every per-speaker track is the full length of the dialog, so you can "
             "drop all four straight onto a timeline without aligning them.",
             "Reference clips are transcribed with Whisper once per run and the "
-            "result is reused for every line by that speaker. The first use "
-            "downloads the Whisper 'base' model (about 140 MB).",
+            "result is reused for every line by that speaker. Whisper is an "
+            "optional install (`pip install openai-whisper`) and also needs the "
+            "`ffmpeg` command on PATH — macOS does not ship it, so "
+            "`brew install ffmpeg` first. The first use downloads the Whisper "
+            "'base' model (about 140 MB). Without either, the node falls back to "
+            "cross-lingual mode instead of failing.",
             "Cancel stops the node between lines rather than at the end of the "
             "whole dialog.",
             "Check the message output: it names the lines that were skipped for "
@@ -516,8 +591,12 @@ NODE_DOCS: dict[str, dict] = {
             "Каждая дорожка говорящего имеет полную длину диалога, поэтому все "
             "четыре можно класть на таймлайн без дополнительного выравнивания.",
             "Референсные клипы расшифровываются Whisper один раз за запуск, и "
-            "результат переиспользуется для всех реплик этого говорящего. При "
-            "первом обращении скачивается модель Whisper 'base' (около 140 МБ).",
+            "результат переиспользуется для всех реплик этого говорящего. Whisper "
+            "устанавливается отдельно (`pip install openai-whisper`) и требует "
+            "команду `ffmpeg` в PATH — на macOS её нет, поставьте "
+            "`brew install ffmpeg`. При первом обращении скачивается модель "
+            "Whisper 'base' (около 140 МБ). Без любого из двух нода не падает, а "
+            "переходит в cross-lingual режим.",
             "Cancel останавливает ноду между репликами, а не по завершении всего "
             "диалога.",
             "Смотрите выход message: там перечислены реплики, пропущенные "

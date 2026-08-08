@@ -58,6 +58,17 @@ MODEL_CONFIGS = {
     },
 }
 
+# The GRPO reinforcement-learning post-trained LLM ships *inside* the same
+# repository as an extra checkpoint rather than as a separate model: there is no
+# `..._RL` repo (ModelScope 404, HuggingFace 401). The vendored loader hardcodes
+# `llm.pt`, so selecting this one means loading it over the top afterwards —
+# exactly what the vendored `CosyVoice3Model.load` does for the default.
+RL_LLM_CHECKPOINT_NAME = "llm.rl.pt"
+
+LLM_CHECKPOINT_STANDARD = "standard"
+LLM_CHECKPOINT_RL = "reinforcement-learning"
+LLM_CHECKPOINT_CHOICES = [LLM_CHECKPOINT_STANDARD, LLM_CHECKPOINT_RL]
+
 COMMON_MODEL_FILES = {
     "campplus.onnx",
     "flow.pt",
@@ -504,7 +515,19 @@ def load_cosyvoice_model(
         if vendored_path not in sys.path:
             sys.path.insert(0, vendored_path)
 
-        from cosyvoice.cli.cosyvoice import AutoModel
+        # The vendored tree imports whisper and librosa.filters at module level
+        # purely to compute mel spectrograms, and both pull numba, which refuses
+        # to load against NumPy 2.2+. Substitute the pack's own mel front-end for
+        # whichever of them cannot import, before the vendored import runs. A
+        # no-op where they import fine. See utils/ts_runtime_shims.py.
+        from utils.ts_runtime_shims import install_cosyvoice_import_shims
+
+        install_cosyvoice_import_shims()
+
+        try:
+            from cosyvoice.cli.cosyvoice import AutoModel
+        except ImportError as exc:
+            raise _diagnose_runtime_import_failure(exc) from exc
 
         # Determine device
         if device is None:
@@ -536,11 +559,110 @@ def load_cosyvoice_model(
         raise
 
 
+# numba refuses to import against a NumPy newer than it supports, and the vendored
+# CosyVoice frontend imports `whisper` at module level — whisper in turn imports
+# numba. So a NumPy that is merely *newer* than numba expects takes the entire pack
+# down at model-load time, with a traceback that names numba and mentions neither
+# this pack nor how to fix it.
+_NUMBA_SIGNATURES = ("numba", "numpy")
+
+
+def _diagnose_runtime_import_failure(exc: ImportError) -> RuntimeError:
+    """
+    Turn an unhelpful vendored import failure into an actionable one.
+
+    Args:
+        exc: the original ImportError raised while importing the CosyVoice runtime.
+
+    Returns:
+        A RuntimeError to raise in its place. The original is kept as the cause.
+    """
+    message = str(exc).lower()
+    if all(token in message for token in _NUMBA_SIGNATURES):
+        installed = "unknown"
+        try:
+            import numpy
+
+            installed = numpy.__version__
+        except Exception:
+            pass
+        return RuntimeError(
+            "[TS CosyVoice Model Manager] The CosyVoice runtime could not be imported "
+            f"because numba rejects the installed NumPy ({installed}).\n"
+            "The pack normally works around this: the only things on the synthesis "
+            "path that needed numba were two mel spectrograms, and it substitutes its "
+            "own implementation for them (utils/ts_runtime_shims.py). Reaching this "
+            "error means something else in the import chain now wants numba too, "
+            "which the shims do not cover.\n"
+            "Either report it with the traceback below, or install a NumPy that numba "
+            "accepts (numpy<2.2) into the ComfyUI Python as a stopgap.\n"
+            f"Original error: {exc}"
+        )
+
+    return RuntimeError(
+        "[TS CosyVoice Model Manager] The CosyVoice runtime could not be imported. "
+        "Install the pack requirements into the ComfyUI Python and restart ComfyUI:\n"
+        "    pip install -r requirements.txt\n"
+        f"Original error: {exc}"
+    )
+
+
+def apply_rl_llm_checkpoint(model: Any, model_root: str, device: "torch.device | None" = None) -> None:
+    """
+    Swap in the reinforcement-learning LLM checkpoint shipped alongside the default.
+
+    Mirrors what the vendored ``CosyVoice3Model.load`` does for ``llm.pt``: load the
+    state dict and apply it strictly. Done after the model is fully constructed, so
+    no vendored file has to be patched to point at a different filename.
+
+    Args:
+        model: the loaded runtime returned by ``load_cosyvoice_model``.
+        model_root: directory the weights were found in.
+        device: map_location for the checkpoint; defaults to the model's own device.
+
+    Raises:
+        FileNotFoundError: if the RL checkpoint is not in the downloaded model.
+        RuntimeError: if it exists but does not fit this model.
+    """
+    checkpoint_path = os.path.join(model_root, RL_LLM_CHECKPOINT_NAME)
+    if not os.path.isfile(checkpoint_path):
+        raise FileNotFoundError(
+            f"[TS CosyVoice Model Manager] The reinforcement-learning checkpoint "
+            f"{RL_LLM_CHECKPOINT_NAME} is not present in {model_root}. It ships with "
+            f"Fun-CosyVoice3-0.5B-2512; delete the model folder and let the loader "
+            f"download it again, or switch llm_checkpoint back to 'standard'."
+        )
+
+    llm_module = getattr(getattr(model, "model", None), "llm", None)
+    if llm_module is None:
+        raise RuntimeError(
+            "[TS CosyVoice Model Manager] Could not reach model.llm to apply the "
+            "reinforcement-learning checkpoint; switch llm_checkpoint to 'standard'."
+        )
+
+    map_location = device if device is not None else getattr(model.model, "device", "cpu")
+    try:
+        # weights_only=True per the pack's own policy: this file is downloaded, and
+        # it only ever contains tensors, so there is no reason to run pickle.
+        state_dict = torch.load(checkpoint_path, map_location=map_location, weights_only=True)
+        llm_module.load_state_dict(state_dict, strict=True)
+    except Exception as e:
+        raise RuntimeError(
+            f"[TS CosyVoice Model Manager] Failed to apply {RL_LLM_CHECKPOINT_NAME}: {e}"
+        ) from e
+
+    LOGGER.info(
+        "[TS CosyVoice Model Manager] Applied reinforcement-learning LLM checkpoint: %s",
+        RL_LLM_CHECKPOINT_NAME,
+    )
+
+
 def get_cached_model(
     model_version: str,
     download_source: str = "ModelScope",
     device: torch.device | None = None,
     fp16: bool = False,
+    llm_checkpoint: str = LLM_CHECKPOINT_STANDARD,
 ) -> Dict[str, Any]:
     """
     Get a CosyVoice model, using cache if available
@@ -560,7 +682,9 @@ def get_cached_model(
     # device string would store several identical models under different keys
     # (e.g. "auto" -> cuda:0 vs "cuda" -> cuda), doubling VRAM.
     effective_fp16 = bool(fp16) and torch.cuda.is_available()
-    cache_key = f"{model_version}_fp16_{int(effective_fp16)}"
+    # The checkpoint choice changes the loaded weights, so it must be part of the
+    # key — otherwise toggling it would silently return the previously loaded LLM.
+    cache_key = f"{model_version}_fp16_{int(effective_fp16)}_llm_{llm_checkpoint}"
 
     # Fast path: already loaded, no lock needed.
     cached_info = _MODEL_CACHE.get(cache_key)
@@ -576,7 +700,9 @@ def get_cached_model(
             LOGGER.info("[TS CosyVoice Model Manager] Using cached model: %s", model_version)
             return cached_info
 
-        return _load_and_cache_model(cache_key, model_version, download_source, device, fp16)
+        return _load_and_cache_model(
+            cache_key, model_version, download_source, device, fp16, llm_checkpoint
+        )
 
 
 def _load_and_cache_model(
@@ -585,6 +711,7 @@ def _load_and_cache_model(
     download_source: str,
     device: torch.device | None,
     fp16: bool,
+    llm_checkpoint: str = LLM_CHECKPOINT_STANDARD,
 ) -> Dict[str, Any]:
     """Download, load and cache a model. Callers must hold this key's lock."""
     # Get model path (download if needed)
@@ -592,6 +719,15 @@ def _load_and_cache_model(
 
     # Load model
     model = load_cosyvoice_model(model_path, device, fp16=fp16)
+
+    if llm_checkpoint == LLM_CHECKPOINT_RL:
+        model_root = find_model_root(model_path) or model_path
+        # The *actual* device, not the requested one. On Apple Silicon the loader
+        # resolves `auto` to mps, but the vendored runtime has no mps path and
+        # runs on cpu — passing the request would stage a multi-hundred-megabyte
+        # checkpoint through mps only to copy it into cpu parameters, which on a
+        # unified-memory Mac is both wasteful and a real allocation risk.
+        apply_rl_llm_checkpoint(model, model_root, get_runtime_device(model))
 
     # Detect model version for nodes to use
     version_lower = model_version.lower()
@@ -611,6 +747,7 @@ def _load_and_cache_model(
         "device": actual_device,
         "fp16": fp16,
         "sample_rate": model.sample_rate,  # Use actual model sample rate (24000 for v2/v3, 22050 for v1)
+        "llm_checkpoint": llm_checkpoint,
         "is_cosyvoice3": is_cosyvoice3,
         "is_cosyvoice2": is_cosyvoice2,
     }

@@ -8,7 +8,7 @@ Extracts the speaker features from a reference recording and saves them as a reu
 | --- | --- | --- | --- | --- |
 | `model` | COSYVOICE_MODEL | yes | — | The loaded CosyVoice model, from the TS CosyVoice Model Loader node. |
 | `reference_audio` | AUDIO | yes | — | Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre. |
-| `reference_text` | STRING | yes | — | What is actually said in the reference audio. Leave it empty to have Whisper transcribe it automatically — an accurate transcript noticeably improves the clone. |
+| `reference_text` | STRING | yes | — | What is actually said in the reference audio. Leave it empty to have Whisper transcribe it automatically — an accurate transcript noticeably improves the clone. Auto-transcription needs the ffmpeg command on PATH, which macOS does not have by default. |
 | `speaker_name` | STRING | yes | `my_speaker` | File name for the preset, without extension. Must be a plain name: no slashes, no '..', none of < > : " / \ \| ? *. |
 
 ## Outputs
@@ -21,7 +21,8 @@ Extracts the speaker features from a reference recording and saves them as a reu
 
 - Reference audio is trimmed to the first 30 seconds and downmixed to mono 24 kHz before it reaches the model. Clean speech without music or background noise clones far better than a long noisy sample.
 - Presets are written to `ComfyUI/models/cosyvoice/speaker/`. Saving under an existing name overwrites it.
-- Leaving reference_text empty pulls in Whisper. The first time, that downloads the Whisper 'base' model (about 140 MB) into `ComfyUI/models/whisper/`.
+- Leaving reference_text empty pulls in Whisper, which is an optional install: `pip install openai-whisper`. It is not required because it depends on numba, and numba refuses to load against the NumPy that current ComfyUI ships — making it mandatory would break the whole pack. The first time it runs it downloads the Whisper 'base' model (about 140 MB) into `ComfyUI/models/whisper/`.
+- Whisper decodes audio by running the `ffmpeg` command, so it must be on PATH. Windows ComfyUI builds usually bundle it; **macOS does not ship it** — `brew install ffmpeg`. Without ffmpeg the preset is still saved, but with an empty reference text.
 - If Whisper is missing or fails, the preset is still saved but with an empty transcript, and a warning naming the reason is written to the ComfyUI console log. Such a preset clones noticeably worse, and the node gives no on-canvas sign of it — check the log after saving a preset without a reference_text, then fill the text in by hand and save again.
 
 ---

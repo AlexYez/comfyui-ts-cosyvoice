@@ -5,6 +5,220 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-08
+
+Two things at once: audio quality in voice conversion, and the pack becoming
+installable again on a current ComfyUI. The second matters more — as of 1.0.0 the
+pack could not load a model at all on ComfyUI's own NumPy 2.5, and the fix was to
+stop needing numba rather than to hold somebody else's NumPy back.
+
+Backwards compatible under the 1.0.0 promise: no node, no existing input and no
+output changed. Five optional
+inputs are **appended** to the end of their nodes' widget lists — `widgets_values`
+is positional and applied from index 0, so graphs saved with 1.0.0 keep mapping
+correctly. The contract baseline was regenerated deliberately and still asserts
+that every pre-existing input kept its name, order, type and default.
+
+### Fixed
+- **Chunk seams no longer drop out.** The join between converted chunks faded one
+  chunk out to zero, faded the next in from zero and concatenated them. Measured
+  on a constant-amplitude signal it reached exactly `0.0` at every boundary — a
+  40 ms dropout roughly every 24 seconds of converted audio. It is now a real
+  overlap-add crossfade that holds unity gain across the seam.
+- **Silence-aware splitting works again.** It called `librosa.effects.split`,
+  whose numba backend refuses to load against modern NumPy, so the whole path was
+  dead and every cut landed at a fixed offset — frequently mid-word. Reimplemented
+  as framed RMS in torch, with no optional dependency to fail.
+- **Pitch shifting no longer runs at 16 kHz.** It was applied *after* the source
+  was reduced for the tokenizer, which is the worst place for it. It now runs at up
+  to the model's own rate, before that reduction.
+
+### Added
+- **Overlapping chunks with aligned joins.** Each chunk after the first re-reads
+  one second of its predecessor, so timbre and prosody no longer restart at every
+  boundary. Because a model's output length is not an exact function of its input
+  length, the overlap is *measured* by normalised cross-correlation (SOLA) rather
+  than assumed, then crossfaded — the approach long-form and streaming voice
+  conversion implementations use.
+- **Formant-preserving pitch shift** via WORLD F0 rescaling, so ±12 semitones no
+  longer also makes the speaker sound smaller or larger. Verified to track the
+  requested shift within 0.4% across the full range. `pyworld` was already a
+  declared dependency but unused at inference time; a phase vocoder remains the
+  fallback.
+- `diffusion_steps` on voice conversion. The flow decoder ran a hardcoded 10 Euler
+  steps; 25–40 resolves more detail at proportional cost. Implemented by wrapping
+  the decoder at runtime rather than patching vendored code, and scoped to the one
+  call — these settings live on the shared cached model and would otherwise change
+  every other node in the graph.
+- `guidance_strength` on voice conversion, exposing the classifier-free guidance
+  rate that was fixed at 0.7 in the model configuration.
+- `normalize_output` and `target_rms_dbfs` on voice conversion, so different
+  reference clips stop producing wildly different output levels. This is RMS
+  normalisation with a -1 dBFS peak ceiling and is labelled as such — it is not an
+  EBU R128 loudness measurement.
+- `llm_checkpoint` on the loader, selecting the GRPO reinforcement-learning LLM
+  that ships as `llm.rl.pt` inside the same model folder. There is no separate
+  `..._RL` repository (ModelScope 404, HuggingFace 401), so this loads the
+  checkpoint over the default after construction; the choice is part of the cache
+  key, so switching reloads rather than silently reusing the other weights.
+
+### Fixed after a follow-up audit
+- **A newer NumPy took the whole pack down, with no hint of why.** The vendored
+  speech tokenizer imports `openai-whisper` at module level, whisper imports numba,
+  and numba refuses to load against a NumPy it does not support — so model loading
+  failed in *every* node with a traceback naming only numba. Reproduced on
+  ComfyUI 0.31.1 with NumPy 2.5.1 and numba 0.61.0. The first fix was to declare
+  the ceiling numba implies (`numpy<2.2`); that was **replaced before release** by
+  removing the pack's need for numba altogether — see "The pack no longer needs
+  numba" below. Pinning NumPy down would have downgraded a library the rest of the
+  user's ComfyUI depends on.
+- **Chunk alignment could shift timing by half a second.** The SOLA search radius
+  was derived as half the overlap — ±500 ms for a 1 s overlap — while the matching
+  window came from the crossfade and was only 20 ms, under two pitch periods of a
+  low voice. For quasi-periodic speech a wide search does not find a better answer,
+  it admits more wrong ones. Measured on a sustained vowel with two independent
+  generations, worst-case misalignment was **554 ms**; with the search and window
+  now set as absolute durations (80 ms each, sized from the model's own 40 ms token
+  grid) it is **154 ms**, and 71 ms when ambiguity is the only error source.
+  `tests/test_sola_production_config.py` checks the shipped values — the previous
+  alignment tests used a wider window and a fifth of the search, so the
+  configuration that actually shipped was never checked.
+- **The last pitch-shift fallback was unguarded.** With pyworld absent and
+  torchaudio failing, the librosa branch raised a raw
+  `ImportError: Numba needs NumPy 2.1 or less` from inside librosa. It now raises
+  one error naming all three failed shifters and how to proceed.
+- `apply_rl_llm_checkpoint` loads with `weights_only=True`, per the pack's own
+  policy for downloaded `.pt` files.
+- The flow-decoder wrapper is no longer installed when the requested step count
+  equals the vendored default, which was every run at the node's default.
+- `_join_converted_chunks` rejects a mismatched overlap list instead of silently
+  falling back to a plain crossfade, which would have left the overlap duplicated
+  in the output.
+- Removed the README badge claiming "29 tests passing": the suite is dev-local, so
+  nothing in the published repository can substantiate a count, and the link
+  pointed at a gitignored folder.
+
+### macOS and cross-platform
+A dedicated compatibility audit found that the pack ran on macOS but promised
+things it could not deliver there, and that one dependency could block the install
+outright.
+
+- **`pyworld` is no longer a hard dependency.** It publishes wheels for Windows
+  only (0.3.5: `win_amd64`/`win32` plus an sdist), so requiring it made
+  `pip install -r requirements.txt` build a C++ extension — failing outright on a
+  Mac without the Xcode Command Line Tools, before ComfyUI even started. It is now
+  an optional extra (`world-pitch`); the pitch shift already fell back to a phase
+  vocoder without it, and a test now pins that the fallback works and that the pack
+  still registers all seven nodes.
+- **The loader stops advertising acceleration it does not use.** The vendored
+  runtime has no Metal/MPS path — every device decision in it is
+  `cuda if available else cpu` — so on Apple Silicon everything runs on the CPU.
+  Unsupported devices are now reduced to CPU with an explicit log line, instead of
+  reporting "Auto-selected accelerator: mps" two lines before "Device: cpu". The
+  `mps` option stays selectable: removing a combo value would break saved
+  workflows. Tooltips, help pages and README say what actually happens.
+- **The RL checkpoint loads onto the device the model really uses.** It was handed
+  the *requested* device, so on a Mac it staged a multi-hundred-megabyte checkpoint
+  through MPS only to copy it into CPU parameters — wasteful, and a real allocation
+  risk in unified memory.
+- **Silence detection allocates 1x the signal instead of 5x.** `unfold(...).pow(2)`
+  materialised frames × frame_length floats: measured at 288 MB for a 10-minute
+  source and 864 MB for 30 minutes, on top of the 1.5 GB model. Average pooling over
+  the squared signal produces frame-for-frame identical values (verified to float32
+  noise) from one copy.
+- Preset listing matches the `.pt` extension case-insensitively, so a file named
+  `Voice.PT` on a case-preserving filesystem is no longer invisible.
+- `ffmpeg` is documented as what Whisper auto-transcription requires — macOS does
+  not ship it, and without it a preset is saved with an empty reference text.
+- New `.github/workflows/platform_install.yml` installs the requirements on
+  macOS 14 (Apple Silicon) and Linux and smoke-checks the portable helpers. It does
+  not run the suite — `tests/` is dev-local — but it would have caught the
+  `pyworld` problem on its own.
+
+### The pack no longer needs numba, and no longer constrains your NumPy
+- **Fixed: the pack could not load a model on an up-to-date ComfyUI at all.**
+  Current ComfyUI ships NumPy 2.5. numba refuses to import against NumPy 2.2 or
+  newer, and the vendored tree reached for two numba-carrying packages at *module*
+  level on the inference path: `cosyvoice/cli/frontend.py` imports `whisper` for
+  `log_mel_spectrogram`, `cosyvoice/tokenizer/tokenizer.py` imports
+  `whisper.tokenizer`, and the shipped `cosyvoice3.yaml` resolves
+  `feat_extractor: !name:matcha.utils.audio.mel_spectrogram`, whose module does
+  `from librosa.filters import mel`. Any one of those raised, so every node in the
+  pack failed at model load with a traceback about NumPy.
+- **Changed: the NumPy ceiling is gone.** The previous release pinned
+  `numpy>=1.24.0,<2.2` to keep numba working. That was the wrong thing to
+  constrain: this pack installs into somebody else's ComfyUI, and the pin does not
+  quietly go unsatisfied — pip downgrades a library the rest of that install
+  depends on. `numpy` is now floored only.
+- **Added `utils/ts_mel.py`.** All three of those imports existed for mel
+  spectrograms, which are ordinary arithmetic. This module computes librosa's
+  `filters.mel` (slaney scale and normalisation) and ports whisper's
+  `log_mel_spectrogram`, in torch and NumPy. It is not an approximation: it agrees
+  with librosa's own implementation to within one float32 ULP at every parameter
+  set the pack uses, including the shipped model's exact `feat_extractor`
+  (`sr=24000, n_fft=1920, n_mels=80`). Where whisper is installed at all, its
+  precomputed filterbank asset is read straight off disk so the speech tokenizer's
+  input stays bit-identical to upstream.
+- **Added `utils/ts_runtime_shims.py`.** It registers those stand-ins in
+  `sys.modules` before the vendored import runs. **No vendored file is patched** —
+  `cosyvoice/` and `matcha/` stay byte-identical to upstream, which is what keeps
+  pulling upstream fixes cheap. The shims are installed *only* where the real
+  package cannot be imported; where it can, nothing is touched and behaviour is
+  exactly upstream's.
+- **Changed: `openai-whisper` and `librosa` are now optional extras.** Keeping
+  either as a hard requirement reimposes the NumPy cap transitively through numba.
+  Nothing on the synthesis path uses them any more. What they still buy:
+  `openai-whisper` (extra `transcription`) auto-fills `reference_text` in Save
+  Speaker and Dialog; `librosa` is the last-resort pitch shifter behind `pyworld`
+  and `torchaudio`. Both nodes already degraded gracefully without transcription
+  and still do — now with a message that says which install is missing and that
+  synthesis is unaffected, instead of an `AttributeError`.
+- **Fixed: `scipy` and `matplotlib` were never declared, and one of them stopped
+  being guaranteed.** A dependency audit that resolved every import in the tree
+  against the declared manifests found both missing. `scipy` is imported by
+  `cosyvoice/hifigan/generator.py` for the HiFT vocoder — it used to arrive
+  transitively because librosa requires it, so making librosa optional would have
+  left a fresh install unable to load a model at all. `matplotlib` is reached
+  through `cosyvoice/hifigan/hifigan.py` → `matcha/hifigan/xutils.py` while the
+  shipped `cosyvoice3.yaml` is parsed, and was missing already. Every other
+  declared package lists both under an extra only, which pip does not install. A
+  test now pins each with the reason.
+- Verified end to end on the failing configuration: ComfyUI 0.31.1, Python 3.12.9,
+  **NumPy 2.5.1**, with nothing installed or downgraded — model loads in ~22 s and
+  a five-second voice conversion completes at RTF 0.52 with numba never imported.
+
+### Internal
+- New `utils/ts_audio_dsp.py` holds the signal-level helpers (silence detection,
+  crossfade, SOLA alignment, RMS normalisation) as pure functions, tested against
+  analytic expectations rather than "it ran".
+- `tests/test_platform_compat.py` covers the paths that only differ off Windows:
+  the pyworld-absent pitch shift, device normalisation, case-insensitive preset
+  listing, and the absence of `subprocess`/absolute-path assumptions anywhere in
+  `nodes/` or `utils/`.
+- The chunking tests that changed meaning were updated, not relaxed: chunks now
+  overlap, so they assert the chunks tile the source exactly once, and the join
+  assertion now pins the absence of the dropout it used to permit.
+- `tests/test_flow_overrides.py` pins that both quality overrides are restored on
+  success, on exception and on cancellation.
+- `tests/test_mel.py` checks the mel front-end against the implementations it
+  replaces rather than against invariants. librosa cannot be *imported* in the
+  environment this targets, so the reference is lifted out of librosa's own source
+  with `ast` and executed against nothing but NumPy — a reference that only worked
+  where librosa already works would never run where it matters. It also pins a
+  defect found while writing it: asset lookup used `importlib.util.find_spec`,
+  which consults `sys.modules` and therefore reported the pack's own whisper
+  stand-in, silently skipping the genuine filterbank on disk in exactly the
+  environment it was meant to serve.
+- `tests/test_runtime_shims.py` is mostly about the shims doing *nothing*: a stub
+  shadowing a working whisper would silently disable transcription, which is worse
+  than the failure being fixed.
+- `tests/test_platform_compat.py` had two tests that pinned the old NumPy cap.
+  They are inverted rather than deleted — they now assert that neither manifest
+  caps NumPy and that neither numba-carrying package is a hard requirement.
+- The macOS/Linux CI job additionally asserts that the mel front-end works and
+  that numba never enters the import graph, run in the same state a user's install
+  is in now that neither package is required.
+
 ## [1.0.0] - 2026-07-31
 
 Stable release. **No functional change from 0.10.0** — the code, the generated

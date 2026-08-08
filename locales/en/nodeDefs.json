@@ -117,13 +117,16 @@
     "description": "Load a CosyVoice model with automatic download and caching.",
     "inputs": {
       "device": {
-        "tooltip": "Preferred compute device, best effort. The CosyVoice runtime places the model itself and uses the GPU when one is available, so this request may not be honoured literally."
+        "tooltip": "Preferred compute device, best effort. The CosyVoice runtime implements CUDA and CPU only — there is no Metal/MPS path in it, so on Apple Silicon the model runs on the CPU whichever option you pick. Unsupported selections are reduced to CPU and the node logs that it did so."
       },
       "download_source": {
         "tooltip": "Where to download the weights from on first use. If the chosen source fails, the other one is tried automatically."
       },
       "fp16": {
-        "tooltip": "Load in half precision on supported accelerators to cut VRAM use. Ignored without CUDA."
+        "tooltip": "Load in half precision to cut VRAM use. Requires CUDA: without it the runtime falls back to FP32 on its own, Apple Silicon included."
+      },
+      "llm_checkpoint": {
+        "tooltip": "Which language-model checkpoint to load. 'reinforcement-learning' uses llm.rl.pt, the GRPO post-trained variant that ships in the same model folder and scores better on the published metrics. Switching reloads the model."
       },
       "model_version": {
         "tooltip": "Which CosyVoice model to load."
@@ -145,7 +148,7 @@
         "tooltip": "Voice to clone. Trimmed to 30 seconds and converted to mono 24 kHz; 3-10 seconds of clean speech gives the best timbre."
       },
       "reference_text": {
-        "tooltip": "What is actually said in the reference audio. Leave it empty to have Whisper transcribe it automatically — an accurate transcript noticeably improves the clone."
+        "tooltip": "What is actually said in the reference audio. Leave it empty to have Whisper transcribe it automatically — an accurate transcript noticeably improves the clone. Auto-transcription needs the ffmpeg command on PATH, which macOS does not have by default."
       },
       "speaker_name": {
         "tooltip": "File name for the preset, without extension. Must be a plain name: no slashes, no '..', none of < > : \" / \\ | ? *."
@@ -194,8 +197,17 @@
   "TS_CosyVoice3_VoiceConversion": {
     "description": "Convert source audio to sound like the target voice (voice-to-voice).",
     "inputs": {
+      "diffusion_steps": {
+        "tooltip": "Euler steps taken by the flow decoder. 10 is the model's own default and favours speed; 25-40 resolves more detail and costs proportionally more time. Raise this before anything else if the result sounds smeared."
+      },
+      "guidance_strength": {
+        "tooltip": "Classifier-free guidance strength. 0.7 is the shipped configuration; higher follows the target voice more closely but increases the risk of artefacts, lower is safer and blander."
+      },
       "model": {
         "tooltip": "The loaded CosyVoice model, from the TS CosyVoice Model Loader node."
+      },
+      "normalize_output": {
+        "tooltip": "Scale the result to a fixed level so different reference clips do not produce wildly different output volumes."
       },
       "pitch_shift_semitones": {
         "tooltip": "Shift the source pitch before conversion. Useful when source and target sit in different registers — try -12 or +12 when converting between a low and a high voice."
@@ -211,6 +223,9 @@
       },
       "target_audio": {
         "tooltip": "The voice to sound like. Trimmed to 30 seconds and converted to the model's format."
+      },
+      "target_rms_dbfs": {
+        "tooltip": "Level to normalise to, when normalize_output is on. This is RMS, not LUFS — it is not an EBU R128 loudness measurement. Peaks are held below -1 dBFS, so a very high target is given up rather than clipped."
       }
     },
     "outputs": {

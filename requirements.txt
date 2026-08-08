@@ -1,8 +1,26 @@
 modelscope
 huggingface_hub
 transformers>=4.40.0
-librosa>=0.10.0
 soundfile>=0.12.0
+# scipy and matplotlib are both imported at model-load time by the vendored tree
+# and are declared explicitly because nothing else here guarantees them — every
+# other declared package lists them only under an extra:
+#   scipy      — cosyvoice/hifigan/generator.py:19 `from scipy.signal import
+#                get_window`, i.e. the HiFT vocoder. It used to arrive
+#                transitively with librosa, which required it; librosa is now
+#                optional, so without this line a fresh install cannot load a
+#                model at all.
+#   matplotlib — reached through cosyvoice/hifigan/hifigan.py ->
+#                matcha/hifigan/models.py -> matcha/hifigan/xutils.py. The shipped
+#                cosyvoice3.yaml instantiates that `hifigan:` block, so the import
+#                happens while the config is being parsed.
+scipy>=1.10.0
+matplotlib>=3.7.0
+# NumPy is floored only. Nothing on the synthesis path needs numba, so there is
+# no ceiling to impose: the two mel spectrograms the vendored code used to reach
+# into openai-whisper and librosa for are computed by the pack itself
+# (utils/ts_mel.py). Pinning NumPy down here would fight ComfyUI, which ships
+# 2.5, and would be the wrong thing to constrain in a shared environment.
 numpy>=1.24.0
 tqdm
 onnxruntime>=1.18.0
@@ -15,11 +33,36 @@ inflect>=7.0.0
 hydra-core>=1.3.0
 pydantic>=2.0.0
 x-transformers>=2.0.0
-openai-whisper
 diffusers>=0.29.0
 wetext
 pyarrow>=14.0.0
-pyworld>=0.3.0
 regex
 einops
 tiktoken
+
+# --- Optional -----------------------------------------------------------------
+# None of the following is needed to load a model or to synthesise. Each buys one
+# specific extra, and each is left out of the required list for a stated reason.
+#
+# openai-whisper — automatic transcription of the reference audio into
+#   reference_text (Save Speaker, Dialog). Without it those nodes work exactly as
+#   before, except you type reference_text yourself.
+#   It is optional because it depends on numba, and numba refuses to load against
+#   NumPy 2.2 or newer while current ComfyUI ships 2.5. Requiring it would either
+#   drag a shared NumPy backwards or break the pack outright. The vendored speech
+#   tokenizer used to import it for a mel spectrogram; the pack now computes that
+#   itself (utils/ts_mel.py), so whisper is no longer on the synthesis path.
+#     pip install openai-whisper
+#
+# librosa — last-resort pitch shift in the voice conversion node, behind pyworld
+#   and torchaudio. Optional for the same numba reason as above.
+#     pip install librosa
+#
+# pyworld — the formant-preserving (WORLD) pitch shift in the voice conversion
+#   node. Without it the node falls back to a phase vocoder and logs which path
+#   it took.
+#   It is optional because pyworld publishes wheels for Windows only, so on macOS
+#   and Linux pip builds a C++ extension from source. That needs the Xcode
+#   Command Line Tools on a Mac, and a hard requirement would turn a missing
+#   compiler into a failed install of the whole pack.
+#     pip install pyworld

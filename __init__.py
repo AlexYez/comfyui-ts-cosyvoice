@@ -40,7 +40,7 @@ except ImportError:
 
 # Single source of truth for the pack version at runtime. Kept in lockstep with
 # pyproject.toml (and the README badge) by tests/test_version_consistency.py.
-__version__ = "1.0.0"
+__version__ = "1.2.0"
 
 # Serves the generated embedded help pages at
 # /extensions/comfyui-ts-cosyvoice/docs/<node_id>/<locale>.md, which is where the

@@ -31,7 +31,7 @@ SPEAKER B: I'm doing great, thanks for asking!` | The script, one line per turn,
 
 - The prefix match is case-insensitive, so `Speaker A:` works as well as `SPEAKER A:`.
 - Every per-speaker track is the full length of the dialog, so you can drop all four straight onto a timeline without aligning them.
-- Reference clips are transcribed with Whisper once per run and the result is reused for every line by that speaker. The first use downloads the Whisper 'base' model (about 140 MB).
+- Reference clips are transcribed with Whisper once per run and the result is reused for every line by that speaker. Whisper is an optional install (`pip install openai-whisper`) and also needs the `ffmpeg` command on PATH — macOS does not ship it, so `brew install ffmpeg` first. The first use downloads the Whisper 'base' model (about 140 MB). Without either, the node falls back to cross-lingual mode instead of failing.
 - Cancel stops the node between lines rather than at the end of the whole dialog.
 - Check the message output: it names the lines that were skipped for want of a matching speaker input.
 

@@ -71,10 +71,14 @@ def list_speaker_presets() -> list[str]:
     if _SPEAKER_PRESET_CACHE and _SPEAKER_PRESET_CACHE[0] == cache_key:
         return list(_SPEAKER_PRESET_CACHE[1])
 
+    # Case-insensitive extension match. macOS and Windows filesystems are
+    # case-insensitive but case-preserving, so a preset copied in from another
+    # machine — or renamed in Finder — can legitimately end in `.PT` and would
+    # otherwise be invisible in the widget while still existing on disk.
     names = [
         os.path.splitext(filename)[0]
         for filename in sorted(os.listdir(speaker_dir))
-        if filename.endswith(".pt")
+        if filename.lower().endswith(".pt")
     ]
     cached_names = names if names else [NONE_PRESET]
     _SPEAKER_PRESET_CACHE = (cache_key, cached_names)

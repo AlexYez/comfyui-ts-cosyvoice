@@ -47,6 +47,24 @@ def get_whisper_download_dir() -> str:
 def get_whisper_model(log_prefix: str):
     global _WHISPER_MODEL
     if _WHISPER_MODEL is None:
+        # The model loader may have registered a stand-in for whisper so that the
+        # CosyVoice runtime could import without numba. It provides the mel
+        # front-end only -- there is no decoder behind it. Say that plainly
+        # instead of letting `whisper.load_model` fail with an AttributeError.
+        from utils.ts_runtime_shims import is_shimmed
+
+        if is_shimmed("whisper"):
+            LOGGER.warning(
+                "[%s] Automatic transcription is unavailable: openai-whisper "
+                "cannot be imported in this environment (commonly numba vs the "
+                "installed NumPy), so only the pack's built-in mel front-end is "
+                "in place. Enter reference_text manually, or install "
+                "openai-whisper against a NumPy numba supports (numpy<2.2). "
+                "Synthesis itself is unaffected.",
+                log_prefix,
+            )
+            return None
+
         try:
             import whisper
 

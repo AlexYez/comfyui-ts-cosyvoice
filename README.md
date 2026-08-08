@@ -7,11 +7,10 @@
 **Клонируйте голос. Меняйте эмоции. Локализуйте на 9 языков.**
 **Соберите многоголосый диалог одним нодом — прямо в ComfyUI.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue?style=flat-square)](./CHANGELOG.md)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
-[![Tests](https://img.shields.io/badge/tests-29%20passing-brightgreen?style=flat-square)](./tests)
 
 🇷🇺 **Русский** · [🇬🇧 English](#-english)
 
@@ -139,7 +138,7 @@ pip install -r requirements.txt
 <details>
 <summary><b>🚀 1. TS CosyVoice Model Loader</b> — главная входная точка</summary>
 
-**Что делает:** скачивает модель из HuggingFace или ModelScope, валидирует целостность файлов, загружает на GPU/CPU/MPS, опционально включает `fp16`.
+**Что делает:** скачивает модель из HuggingFace или ModelScope, валидирует целостность файлов, загружает на CUDA или CPU, опционально включает `fp16`.
 
 **Параметры:**
 
@@ -147,11 +146,12 @@ pip install -r requirements.txt
 |----------|-----|--------------|------------|
 | `model_version` | combo | `Fun-CosyVoice3-0.5B` | Версия модели |
 | `download_source` | combo | `HuggingFace` | Откуда качать |
-| `device` | combo | `auto` | GPU / CPU / MPS |
+| `device` | combo | `auto` | CUDA или CPU (см. «Платформы») |
 | `fp16` | bool | `false` | Половинная точность (экономит VRAM) |
+| `llm_checkpoint` | combo | `standard` | `reinforcement-learning` берёт `llm.rl.pt` (GRPO post-training) из той же папки модели |
 
 > [!TIP]
-> `device = auto` сам выберет лучший доступный ускоритель (CUDA → XPU → NPU → MLU → MPS → CPU). В большинстве случаев это правильный выбор.
+> `device = auto` возьмёт CUDA, если она есть, и иначе CPU. Рантайм CosyVoice реализует только эти два варианта: `mps` и прочие ускорители сводятся к CPU с записью в лог — подробнее в разделе «Платформы».
 
 </details>
 
@@ -232,9 +232,11 @@ pip install -r requirements.txt
 **Что делает:** заменяет тембр в существующей записи. На входе — `source_audio` (что говорить) и `target_audio` (как звучать). На выходе — `source_audio`, но «голосом» `target_audio`.
 
 **Особенности:**
-- ✂️ Автоматический chunking длинных записей по тишине
-- 🎚️ Опциональный pitch shift (`-12` до `+12` полутонов)
-- 🌊 Crossfade на стыках чанков — без щелчков
+- ✂️ Автоматический chunking длинных записей по тишине, с перекрытием в 1 секунду
+- 🌊 Стыки чанков выравниваются по перекрытию (SOLA) и склеиваются кроссфейдом — без провалов и щелчков
+- 🎚️ Опциональный pitch shift (`-12` до `+12` полутонов), формантно-сохраняющий (WORLD)
+- ⚙️ `diffusion_steps` и `guidance_strength` — качество против времени
+- 📏 Опциональная нормализация громкости выхода по RMS
 
 **Хорошо для:**
 - 🎙️ Смена голоса в уже записанной речи
@@ -354,6 +356,34 @@ pip install -r requirements.txt
 
 > [!IMPORTANT]
 > Для CUDA-сборки убедитесь, что `torch>=2.0.0+cu...` установлен **до** установки зависимостей пакета, иначе pip может подтянуть CPU-вариант.
+
+### Платформы
+
+| Платформа | Ускорение | Замечания |
+|-----------|-----------|-----------|
+| Windows / Linux + NVIDIA | **CUDA** | Основной сценарий. `fp16` работает |
+| Windows / Linux без GPU | CPU | Работает; voice conversion долгий |
+| **macOS (Apple Silicon и Intel)** | **только CPU** | См. ниже |
+
+> [!WARNING]
+> **macOS: ускорения на GPU нет.** В рантайме CosyVoice отсутствует бэкенд Metal/MPS — все места выбора устройства делают `cuda if available else cpu` (`cosyvoice/cli/model.py`, `cosyvoice/cli/frontend.py`). Пак на macOS работает, но считает на CPU, какой бы вариант вы ни выбрали в `device`; неподдерживаемые значения сводятся к CPU с записью в лог. Это ограничение upstream, а не пакета. `fp16` там же принудительно выключается.
+>
+> Практический вывод: подбирайте настройки на коротком фрагменте. `Text to Voice` на пары предложений вполне терпим, а voice conversion десятиминутной записи на CPU может считаться часами.
+
+### Опциональные компоненты
+
+| Компонент | Для чего | Как поставить |
+|-----------|----------|---------------|
+| `openai-whisper` + `ffmpeg` в PATH | Авторасшифровка референса в `reference_text` (`Save Speaker`, `Dialog`) | `pip install openai-whisper` · ffmpeg: macOS `brew install ffmpeg` · Linux `apt install ffmpeg` · Windows обычно уже есть в сборке ComfyUI |
+| `pyworld` | Формантно-сохраняющий питчшифт (WORLD) в `Voice To Voice` | `pip install pyworld` |
+| `librosa` | Питчшифт последней надежды (за `pyworld` и `torchaudio`) | `pip install librosa` |
+
+> [!NOTE]
+> Ни один из компонентов **не обязателен** — синтез, клонирование и voice conversion работают без них.
+>
+> Без whisper или без `ffmpeg` пресет всё равно сохраняется, но с пустым `reference_text`: в лог уйдёт предупреждение, а качество клона будет заметно хуже — впишите текст руками. Без `pyworld` питчшифт использует фазовый вокодер.
+>
+> **Почему whisper и librosa вынесены из обязательных.** Оба зависят от `numba`, а `numba` отказывается загружаться с NumPy 2.2 и новее — при этом актуальный ComfyUI поставляется с NumPy 2.5. Жёсткая зависимость означала бы либо откат NumPy у всей вашей сборки ComfyUI, либо неработающий пак. Единственное, что vendored-код брал из этих пакетов на пути синтеза, — два мел-спектрограммных фильтрбанка; теперь пак считает их сам (`utils/ts_mel.py`), поэтому потолок на NumPy не нужен. `pyworld` вынесен по другой причине: он публикует колёса только под Windows, и на macOS его сборка требует Xcode Command Line Tools — жёсткая зависимость превращала бы отсутствие компилятора в провал установки всего пакета.
 
 ### Что скачивается автоматически
 | Файл | Размер | Куда | Когда |
@@ -540,7 +570,7 @@ pip install -r requirements.txt
 <details>
 <summary><b>🚀 1. TS CosyVoice Model Loader</b> — entry point</summary>
 
-**What it does:** downloads the model from HuggingFace or ModelScope, validates file integrity, loads it on GPU/CPU/MPS, optionally enables `fp16`.
+**What it does:** downloads the model from HuggingFace or ModelScope, validates file integrity, loads it on CUDA or CPU, optionally enables `fp16`.
 
 **Parameters:**
 
@@ -548,11 +578,12 @@ pip install -r requirements.txt
 |-------|------|---------|-----------------|
 | `model_version` | combo | `Fun-CosyVoice3-0.5B` | Model variant |
 | `download_source` | combo | `HuggingFace` | Where to download from |
-| `device` | combo | `auto` | GPU / CPU / MPS |
+| `device` | combo | `auto` | CUDA or CPU (see “Platforms”) |
 | `fp16` | bool | `false` | Half precision (saves VRAM) |
+| `llm_checkpoint` | combo | `standard` | `reinforcement-learning` loads `llm.rl.pt` (GRPO post-trained) from the same model folder |
 
 > [!TIP]
-> `device = auto` picks the best available accelerator (CUDA → XPU → NPU → MLU → MPS → CPU). It's the right default in most cases.
+> `device = auto` takes CUDA when present and CPU otherwise. The CosyVoice runtime implements only those two: `mps` and other accelerators are reduced to CPU and logged — see “Platforms”.
 
 </details>
 
@@ -633,9 +664,11 @@ pip install -r requirements.txt
 **What it does:** swaps the timbre of an existing recording. `source_audio` decides what is said; `target_audio` decides how it sounds.
 
 **Highlights:**
-- ✂️ Automatic silence-aware chunking for long recordings
-- 🎚️ Optional pitch shift (`-12` to `+12` semitones)
-- 🌊 Crossfade at chunk boundaries — no clicks
+- ✂️ Automatic silence-aware chunking for long recordings, with a 1-second overlap
+- 🌊 Chunk seams are aligned on that overlap (SOLA) and crossfaded — no dropouts, no clicks
+- 🎚️ Optional pitch shift (`-12` to `+12` semitones), formant-preserving (WORLD)
+- ⚙️ `diffusion_steps` and `guidance_strength` — quality against time
+- 📏 Optional RMS level normalisation of the output
 
 **Best for:**
 - 🎙️ Voice swaps in pre-recorded speech
@@ -755,6 +788,34 @@ pip install -r requirements.txt
 
 > [!IMPORTANT]
 > For CUDA builds, make sure `torch>=2.0.0+cu...` is installed **before** running pip on this pack, otherwise pip may pull a CPU-only build.
+
+### Platforms
+
+| Platform | Acceleration | Notes |
+|----------|--------------|-------|
+| Windows / Linux + NVIDIA | **CUDA** | The primary target. `fp16` works |
+| Windows / Linux without a GPU | CPU | Works; voice conversion is slow |
+| **macOS (Apple Silicon and Intel)** | **CPU only** | See below |
+
+> [!WARNING]
+> **macOS: there is no GPU acceleration.** The CosyVoice runtime has no Metal/MPS backend — every device decision in it is `cuda if available else cpu` (`cosyvoice/cli/model.py`, `cosyvoice/cli/frontend.py`). The pack runs on macOS, but on the CPU whichever `device` you select; unsupported values are reduced to CPU and the node logs that it did. This is an upstream limitation, not a pack one. `fp16` is likewise forced off there.
+>
+> Practical consequence: find your settings on a short clip. `Text to Voice` on a couple of sentences is tolerable; voice conversion of a ten-minute recording on CPU can take hours.
+
+### Optional components
+
+| Component | What it enables | How to install |
+|-----------|-----------------|----------------|
+| `openai-whisper` + `ffmpeg` on PATH | Auto-transcribing the reference into `reference_text` (`Save Speaker`, `Dialog`) | `pip install openai-whisper` · ffmpeg: macOS `brew install ffmpeg` · Linux `apt install ffmpeg` · Windows usually bundled with ComfyUI |
+| `pyworld` | Formant-preserving (WORLD) pitch shift in `Voice To Voice` | `pip install pyworld` |
+| `librosa` | Last-resort pitch shift, behind `pyworld` and `torchaudio` | `pip install librosa` |
+
+> [!NOTE]
+> None of these is **required** — synthesis, cloning and voice conversion all work without them.
+>
+> Without whisper or without `ffmpeg`, a preset is still saved but with an empty `reference_text`: a warning goes to the log and the clone is noticeably worse, so type the text in yourself. Without `pyworld` the pitch shift uses a phase vocoder.
+>
+> **Why whisper and librosa are not hard requirements.** Both depend on `numba`, and `numba` refuses to load against NumPy 2.2 or newer — while current ComfyUI ships NumPy 2.5. Requiring them would either drag your whole ComfyUI install's NumPy backwards or leave the pack unable to load a model. The only thing the vendored code took from them on the synthesis path was two mel filterbanks, and the pack now computes those itself (`utils/ts_mel.py`), so no NumPy ceiling is needed. `pyworld` is optional for a different reason: it publishes wheels for Windows only, and building it on macOS needs the Xcode Command Line Tools — as a hard dependency, a missing compiler would fail the install of the whole pack.
 
 ### Auto-downloaded files
 | File | Size | Location | When |

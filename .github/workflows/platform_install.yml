@@ -1,0 +1,168 @@
+name: Install check (macOS / Linux)
+
+# The pack is developed on Windows, so the platform that breaks is the one nobody
+# runs. This job exists because a dependency shipping Windows-only wheels made
+# `pip install -r requirements.txt` fail on macOS without a C++ compiler, and
+# nothing would have noticed.
+#
+# It deliberately does NOT run the test suite: tests/ is dev-local and is not
+# published to this repository. What it proves is narrower and still worth having
+# — that the declared requirements resolve and install on a clean machine, and
+# that the pure-Python/torch helpers import there.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "utils/**"
+      - "nodes/**"
+      - ".github/workflows/platform_install.yml"
+  pull_request:
+    paths:
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "utils/**"
+      - "nodes/**"
+  workflow_dispatch:
+
+concurrency:
+  group: platform-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-14 is Apple Silicon, which is the case with no wheels to fall
+          # back on and no Metal path in the runtime.
+          - os: macos-14
+            python: "3.12"
+          - os: ubuntu-latest
+            python: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install torch (CPU) first
+        # requirements.txt deliberately omits torch — ComfyUI provides it — so the
+        # CPU build is installed here explicitly rather than letting a transitive
+        # dependency choose a version.
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio
+
+      - name: Install the pack requirements
+        # The actual assertion of this job: this must succeed with no compiler
+        # toolchain assumptions. A dependency that only ships Windows wheels will
+        # fail here.
+        run: pip install -r requirements.txt
+
+      - name: Import the platform-independent helpers
+        # The node modules cannot be imported without ComfyUI on the path, so this
+        # covers the parts that stand alone: DSP, preset I/O, fingerprints,
+        # cancellation and the doc generator's prose source.
+        run: |
+          python - <<'PY'
+          import importlib
+
+          for module in (
+              "utils.ts_audio_dsp",
+              "utils.ts_audio_utils",
+              "utils.ts_fingerprint",
+              "utils.ts_interrupt",
+              "utils.ts_logging",
+              "utils.ts_mel",
+              "utils.ts_runtime_shims",
+              "utils.ts_speaker_io",
+              "utils.ts_whisper_utils",
+              "tools.ts_node_docs_source",
+          ):
+              importlib.import_module(module)
+              print(f"imported {module}")
+          PY
+
+      - name: Check the mel front-end works without whisper or librosa
+        # requirements.txt no longer installs either (both pull numba, which caps
+        # NumPy below what ComfyUI ships), so this job runs in exactly the state a
+        # user's install is in. The filterbank the model needs must still come out
+        # right, and numba must not appear anywhere in the import graph.
+        run: |
+          python - <<'PY'
+          import sys
+
+          import torch
+
+          from utils.ts_mel import log_mel_spectrogram, mel_filterbank
+          from utils.ts_runtime_shims import install_cosyvoice_import_shims
+
+          # The shipped cosyvoice3.yaml feat_extractor parameters.
+          bank = mel_filterbank(sr=24000, n_fft=1920, n_mels=80, fmin=0, fmax=None)
+          assert bank.shape == (80, 961), bank.shape
+          assert bank.dtype.name == "float32", bank.dtype
+          assert (bank >= 0).all() and bank.sum() > 0
+
+          shimmed = install_cosyvoice_import_shims()
+          print(f"shims: {shimmed}")
+          assert shimmed["whisper"] is True, "whisper is not installed here, so it must be shimmed"
+
+          import whisper  # resolves through the shim
+
+          from librosa.filters import mel
+
+          mel_spec = whisper.log_mel_spectrogram(torch.zeros(16000), n_mels=128)
+          assert mel_spec.shape[0] == 128 and torch.isfinite(mel_spec).all()
+          assert mel(sr=24000, n_fft=1920, n_mels=80, fmin=0, fmax=None).shape == (80, 961)
+
+          numba_loaded = [m for m in sys.modules if m.split(".")[0] == "numba"]
+          assert not numba_loaded, f"numba was imported: {numba_loaded[:5]}"
+          print("mel front-end works with no numba in the import graph")
+          PY
+
+      - name: Smoke-check the DSP helpers
+        # Cheap numerical sanity on the platform under test: the seam must not
+        # drop out and silence detection must find a gap. Both are pinned properly
+        # in the dev-local suite; this is the portable subset.
+        run: |
+          python - <<'PY'
+          import torch
+
+          from utils.ts_audio_dsp import crossfade_join, find_silence_intervals, normalise_rms, rms_dbfs
+
+          joined = crossfade_join(torch.ones(1, 24000), torch.ones(1, 24000), 480)
+          assert abs(float(joined.min()) - 1.0) < 1e-6, f"seam dropped to {float(joined.min())}"
+
+          sr = 24000
+          t = torch.arange(sr, dtype=torch.float32) / sr
+          tone = (0.4 * torch.sin(2 * 3.141592653589793 * 220 * t)).unsqueeze(0)
+          signal = torch.cat([tone, torch.zeros(1, sr), tone], dim=-1)
+          intervals = find_silence_intervals(signal, sr, min_silence_seconds=0.5)
+          assert len(intervals) == 1, f"expected one silent gap, got {intervals}"
+
+          levelled = normalise_rms(tone, target_dbfs=-20.0)
+          assert abs(rms_dbfs(levelled) - (-20.0)) < 0.01
+
+          print("DSP smoke checks passed")
+          PY
+
+      - name: Report whether the optional pitch shifter is available
+        # Informational only: pyworld has no wheel for this platform, so it is
+        # expected to be absent. The job must stay green either way.
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          try:
+              import pyworld  # noqa: F401
+          except ImportError as exc:
+              print(f"pyworld unavailable (expected on this platform): {exc}")
+          else:
+              print("pyworld is available; the WORLD pitch shift will be used")
+          PY
