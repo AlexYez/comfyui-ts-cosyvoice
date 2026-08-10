@@ -27,6 +27,7 @@ Zero-shot voice cloning: give it a reference recording and the text to read, and
 - emotion_preset wins over instruct_text. instruct_text is read only when the preset is set to the custom entry.
 - Presets are read from `configs/ts_emotion_presets.json` on every run, so you can edit that file and use the change without restarting ComfyUI. New preset *names* appear in the dropdown after a node-definition refresh.
 - Two ways to get a different take. seed = -1 re-runs the node on every execution, so each run is a new take. With a fixed seed the result is reproducible, and ComfyUI returns the cached audio until something changes — set control_after_generate to randomize if you want the seed itself to move between runs.
+- One clip at a time. These nodes process a single AUDIO clip, so a batch of more than one is refused with an explicit error rather than silently reduced to the first clip. Split the batch upstream, or run the graph once per clip.
 
 ---
 

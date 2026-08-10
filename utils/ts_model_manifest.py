@@ -60,35 +60,70 @@ def manifest_path() -> str:
 
 
 @lru_cache(maxsize=1)
-def load_manifest() -> dict[str, Any]:
+def _read_manifest() -> tuple[dict[str, Any], str | None]:
     """
-    Read the manifest, or return an empty one if it is missing or malformed.
+    Return ``(manifest, unavailable_reason)``.
 
-    A pack without a readable manifest keeps working — verification is a guarantee
-    added on top, not a new way for the pack to fail to start. The absence is
-    logged once, because silently skipping an integrity check is exactly the kind
-    of thing that should be visible.
+    Reading never raises, so importing the pack cannot fail on a damaged manifest and
+    ComfyUI still registers the nodes. The *reason* is carried alongside so that the
+    place which actually needs the guarantee can refuse with it — see
+    :func:`require_manifest_entry`. Returning a bare empty dict, as this used to, made
+    "the manifest is broken" indistinguishable from "there is nothing to check", and
+    the load continued either way.
     """
     path = manifest_path()
     try:
         with open(path, encoding="utf-8") as handle:
             manifest = json.load(handle)
-    except OSError:
-        LOGGER.warning(
-            "%s %s is missing; model files cannot be verified against known hashes.",
-            LOG_PREFIX,
-            MANIFEST_NAME,
-        )
-        return {}
+    except OSError as exc:
+        return {}, f"{MANIFEST_NAME} could not be read ({exc.__class__.__name__}: {exc})"
     except ValueError as exc:
-        LOGGER.warning(
-            "%s %s is not valid JSON (%s); model files cannot be verified.",
-            LOG_PREFIX,
-            MANIFEST_NAME,
-            exc,
-        )
-        return {}
-    return manifest if isinstance(manifest, dict) else {}
+        return {}, f"{MANIFEST_NAME} is not valid JSON ({exc})"
+    if not isinstance(manifest, dict):
+        return {}, f"{MANIFEST_NAME} does not contain a JSON object at the top level"
+    if not isinstance(manifest.get("models"), dict):
+        return {}, f"{MANIFEST_NAME} has no 'models' object"
+    return manifest, None
+
+
+def load_manifest() -> dict[str, Any]:
+    """The manifest contents, or an empty dict if it could not be read."""
+    return _read_manifest()[0]
+
+
+def manifest_unavailable_reason() -> str | None:
+    """Why the manifest cannot be used, or None when it is fine."""
+    return _read_manifest()[1]
+
+
+def require_manifest_entry(model_version: str) -> dict[str, Any]:
+    """
+    Return the manifest entry for this model, or refuse.
+
+    This is the fail-closed gate. The manifest ships *with the pack*, so it being
+    absent, malformed, or silent about a model the pack offers is not a normal
+    condition — it means the install is damaged or has been tampered with. Continuing
+    in that state would load and execute ``cosyvoice3.yaml`` with no idea whether it
+    is the file that was vetted, which is precisely the guarantee this file exists to
+    provide.
+    """
+    reason = manifest_unavailable_reason()
+    if reason is None:
+        entry = _model_entry(model_version)
+        if entry.get("files"):
+            return entry
+        reason = f"{MANIFEST_NAME} has no file hashes for model version {model_version!r}"
+
+    raise ModelIntegrityError(
+        f"{LOG_PREFIX} Refusing to load: the model cannot be verified.\n"
+        f"  {reason}\n"
+        f"  The manifest is part of the pack and records the sha256 of every model "
+        f"file that gets read, including cosyvoice3.yaml — which HyperPyYAML executes "
+        f"via its !new: and !apply: tags. Loading without it would mean trusting "
+        f"whatever is on disk.\n"
+        f"  Reinstall or re-pull the pack to restore {MANIFEST_NAME}. If you are adding "
+        f"a new model version, add it with tools/generate_model_manifest.py first."
+    )
 
 
 def _model_entry(model_version: str) -> dict[str, Any]:
@@ -184,9 +219,34 @@ def verify_config_files(model_root: str, model_version: str) -> int:
     Returns the number of files checked, so callers can say so rather than implying
     a verification that never happened.
     """
+    require_manifest_entry(model_version)
+
     entries = manifest_files(model_version, CONFIG_POLICY)
     if not entries:
-        return 0
+        # A manifest that exists but describes no executed files is not a pass. The
+        # previous version returned 0 here and the caller carried on, so an entry
+        # stripped of its `config` section silently disabled the check it exists for.
+        raise ModelIntegrityError(
+            f"{LOG_PREFIX} Refusing to load: {MANIFEST_NAME} lists no configuration "
+            f"files for {model_version!r}, so the file HyperPyYAML executes "
+            f"(cosyvoice3.yaml) cannot be verified. Regenerate the manifest with "
+            f"tools/generate_model_manifest.py."
+        )
+
+    missing = [
+        name
+        for name in entries
+        if not os.path.isfile(os.path.join(model_root, name.replace("/", os.sep)))
+    ]
+    if missing:
+        raise ModelIntegrityError(
+            f"{LOG_PREFIX} Refusing to load: these files are required and verified, "
+            f"but are not present in {model_root}:\n"
+            + "".join(f"    {name}\n" for name in sorted(missing))
+            + "  A partial model directory can result from an interrupted download or "
+            "from two download sources being mixed together. Remove the model folder "
+            "so it is fetched again at the pinned revision."
+        )
 
     bad = _mismatches(model_root, model_version, CONFIG_POLICY)
     if bad:
@@ -215,6 +275,74 @@ def verify_config_files(model_root: str, model_version: str) -> int:
         if os.path.isfile(os.path.join(model_root, name.replace("/", os.sep)))
     )
     return present
+
+
+# PyTorch made `weights_only=True` the default for torch.load in 2.6. Before that the
+# default ran the pickle machinery, which can execute arbitrary code while
+# deserialising. The vendored loader calls torch.load with no weights_only argument
+# (cosyvoice/cli/model.py, cosyvoice/cli/frontend.py), and those files are downloaded,
+# so on an older torch a tampered checkpoint would be code execution rather than a
+# corrupt tensor. Patching the vendored tree is avoided elsewhere in this pack, so
+# this is enforced as a precondition instead.
+SAFE_TORCH_LOAD_VERSION = (2, 6)
+
+
+def _torch_version_tuple() -> tuple[int, int]:
+    import torch
+
+    parts = str(torch.__version__).split("+")[0].split(".")
+    try:
+        return int(parts[0]), int(parts[1])
+    except (IndexError, ValueError):  # pragma: no cover - unparseable dev build
+        return (0, 0)
+
+
+def require_safe_torch_load() -> None:
+    """
+    Refuse to load remote checkpoints on a PyTorch that unpickles them by default.
+    """
+    import torch
+
+    if _torch_version_tuple() >= SAFE_TORCH_LOAD_VERSION:
+        return
+    raise ModelIntegrityError(
+        f"{LOG_PREFIX} Refusing to load: PyTorch {torch.__version__} deserialises "
+        f"torch.load with the pickle machinery unless weights_only=True is passed, and "
+        f"the vendored CosyVoice loader does not pass it. These checkpoints are "
+        f"downloaded, so on this version a tampered file could execute code inside "
+        f"ComfyUI rather than merely fail.\n"
+        f"  PyTorch {SAFE_TORCH_LOAD_VERSION[0]}.{SAFE_TORCH_LOAD_VERSION[1]} or newer "
+        f"defaults to weights_only=True, which closes this. Upgrade the torch in the "
+        f"Python that runs ComfyUI."
+    )
+
+
+def validate_tensors_only(path: str, description: str) -> None:
+    """
+    Prove a ``.pt`` file contains nothing but data, by loading it safely first.
+
+    For files the manifest cannot cover. ``spk2info.pt`` is the case that matters: the
+    upstream repository does not ship it, this pack creates an empty one when it is
+    absent, and the vendored frontend ``torch.load``s whatever is there. That leaves a
+    file nobody vetted on the load path, so it is parsed here with
+    ``weights_only=True`` — which refuses anything that would need pickle — before the
+    vendored code touches it.
+    """
+    import torch
+
+    if not os.path.isfile(path):
+        return
+    try:
+        torch.load(path, map_location="cpu", weights_only=True)
+    except Exception as exc:
+        raise ModelIntegrityError(
+            f"{LOG_PREFIX} Refusing to load: {description} ({os.path.basename(path)}) "
+            f"is not a plain data file.\n"
+            f"  Loading it with weights_only=True failed: {exc}\n"
+            f"  This file is not covered by the manifest and is read directly by the "
+            f"CosyVoice frontend, so anything that needs pickle to deserialise is "
+            f"refused here. Delete it; the pack recreates an empty one."
+        ) from exc
 
 
 def verify_weight_files(model_root: str, model_version: str) -> list[str]:

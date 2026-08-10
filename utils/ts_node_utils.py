@@ -113,11 +113,32 @@ def _load_emotion_presets_cached(path: str, mtime_ns: int) -> dict[str, str]:
     if not isinstance(preset_items, list):
         return presets
 
+    # Skip anything that is not an object instead of calling .get on it. This list
+    # is read at *import* time to build the widget options, so an AttributeError
+    # here propagates out of the node module, out of __init__.py, and ComfyUI
+    # registers none of the pack's seven nodes -- a single stray `null` in a
+    # user-edited JSON file taking out the whole pack.
+    skipped = 0
     for preset in preset_items:
+        if not isinstance(preset, dict):
+            skipped += 1
+            continue
         preset_name = str(preset.get("name", "")).strip()
         preset_instruction = str(preset.get("instruction", "")).strip()
         if preset_name and preset_instruction:
             presets[preset_name] = preset_instruction
+
+    if skipped:
+        LOGGER.warning(
+            "[TS CosyVoice3 Node Utils] Ignored %s in %s; %d preset(s) loaded normally.",
+            (
+                "1 entry that was not a JSON object"
+                if skipped == 1
+                else f"{skipped} entries that were not JSON objects"
+            ),
+            path,
+            len(presets),
+        )
     return presets
 
 

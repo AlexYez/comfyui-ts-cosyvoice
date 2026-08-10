@@ -299,6 +299,83 @@ def sola_join(
     return crossfade_join(accumulated[..., :keep], incoming, fade)
 
 
+class BoundedSolaJoiner:
+    """
+    Join a stream of chunks with SOLA while only ever touching a bounded tail.
+
+    Joining onto one growing tensor costs O(N^2) in total copying: ``sola_join`` ends
+    in ``crossfade_join``, which allocates a fresh tensor and copies both sides, so
+    every chunk re-copies the whole result so far. At the ~24 s chunks this pack uses,
+    a one-hour source is ~150 chunks and the accumulated copying dominates the join.
+
+    Only the last few hundred milliseconds of the result can affect the next splice:
+    ``find_sola_offset`` reads a window around an anchor ``expected_overlap`` samples
+    from the end, and ``crossfade_join`` blends the final ``fade`` samples. So the tail
+    kept here is ``max_overlap + search + fade`` samples, everything before it is
+    final, and the pieces are concatenated exactly once.
+
+    The output is *identical* to joining onto the full tensor, not an approximation.
+    With ``accumulated = finalized ++ tail`` and a tail at least
+    ``overlap + search + fade`` long, the anchor, the search window and the fade region
+    all fall inside the tail, so the finalized prefix cannot change what is computed
+    and is only ever appended to. ``tests/test_audio_dsp.py`` asserts bit-equality
+    against the growing-tensor implementation this replaces.
+    """
+
+    def __init__(
+        self,
+        first: torch.Tensor,
+        *,
+        fade_samples: int,
+        search_samples: int,
+        correlation_samples: int,
+        max_overlap_samples: int,
+    ) -> None:
+        self._fade = max(0, int(fade_samples))
+        self._search = max(1, int(search_samples))
+        self._correlation = max(1, int(correlation_samples))
+        # +1 so the tail is strictly longer than the region that can be read, which
+        # keeps the equivalence argument above true rather than borderline.
+        self._budget = max(1, int(max_overlap_samples)) + self._search + self._fade + 1
+        self._finalized: list[torch.Tensor] = []
+        self._tail = first
+        self._trim()
+
+    def _trim(self) -> None:
+        """Move everything older than the tail budget into the finalized list."""
+        extra = self._tail.shape[-1] - self._budget
+        if extra <= 0:
+            return
+        # Cloned rather than kept as views: a view would keep the whole joined tensor
+        # alive, which is the allocation this class exists to avoid.
+        self._finalized.append(self._tail[..., :extra].clone())
+        self._tail = self._tail[..., extra:].clone()
+
+    def append(self, incoming: torch.Tensor, expected_overlap_samples: int) -> None:
+        """Splice the next chunk on, using the same rules as :func:`sola_join`."""
+        overlap = max(0, int(expected_overlap_samples))
+        if overlap > 0:
+            self._tail = sola_join(
+                self._tail,
+                incoming,
+                expected_overlap_samples=overlap,
+                fade_samples=self._fade,
+                search_samples=self._search,
+                correlation_samples=self._correlation,
+            )
+        else:
+            self._tail = crossfade_join(self._tail, incoming, self._fade)
+        self._trim()
+
+    def result(self) -> torch.Tensor:
+        """The joined waveform, concatenated once."""
+        import torch
+
+        if not self._finalized:
+            return self._tail
+        return torch.cat([*self._finalized, self._tail], dim=-1)
+
+
 def rms_dbfs(waveform: torch.Tensor) -> float:
     """Return the RMS level of ``waveform`` in dBFS (``-inf`` for silence)."""
     mono = _as_mono(waveform)

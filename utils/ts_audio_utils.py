@@ -36,24 +36,48 @@ def _require_soundfile():
     return sf
 
 
+class BatchedAudioNotSupported(ValueError):
+    """More than one clip was supplied where exactly one is processed."""
+
+
+def reject_audio_batch(waveform: Any, context: str = "") -> None:
+    """
+    Refuse a ``[B, C, T]`` AUDIO waveform carrying more than one clip.
+
+    These nodes process exactly one clip. Until now a batch was silently reduced to
+    ``waveform[0]``, logged at DEBUG in one path and not logged at all in voice
+    conversion, so feeding a 5-clip batch produced one clip and reported success --
+    the four discarded clips left no trace at any default log level.
+
+    Refusing is the honest behaviour: an explicit error naming the fix costs the user
+    one node, whereas silent truncation costs them output they may not notice is
+    missing. Anything with ``B == 1`` is unaffected, which is every graph that was
+    getting correct results before.
+    """
+    if getattr(waveform, "ndim", 0) != 3:
+        return
+    batch = int(waveform.shape[0])
+    if batch <= 1:
+        return
+    raise BatchedAudioNotSupported(
+        f"[TS CosyVoice3] {context or 'This node'} received {batch} audio clips in one "
+        f"AUDIO batch, and processes exactly one. Previously the extra clips were "
+        f"dropped without an error, which is why this is now refused rather than "
+        f"guessed at.\n"
+        f"  Split the batch first (for example with a batch-index / select node), or "
+        f"run the graph once per clip."
+    )
+
+
 def _drop_batch_dim(waveform: Any, context: str = "") -> Any:
     """
-    Reduce a ``[B, C, T]`` AUDIO waveform to ``[C, T]``.
+    Reduce a ``[B, C, T]`` AUDIO waveform to ``[C, T]``, refusing real batches.
 
-    CosyVoice operates on a single clip. When ``B == 1`` this is a plain squeeze;
-    when ``B > 1`` we take the first item and log it, rather than leaving a 3-D
-    array that soundfile would later reject with a cryptic error. Non-3-D input is
-    returned unchanged.
+    Non-3-D input is returned unchanged.
     """
     if waveform.ndim != 3:
         return waveform
-    if waveform.shape[0] > 1:
-        LOGGER.debug(
-            "[TS CosyVoice3 Audio Utils] %s received a batch of %d clips; using the first one.",
-            context or "audio",
-            int(waveform.shape[0]),
-        )
-        return waveform[0]
+    reject_audio_batch(waveform, context)
     return waveform.squeeze(0)
 
 

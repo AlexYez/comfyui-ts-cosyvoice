@@ -1,5 +1,5 @@
 {
-  "_comment": "sha256 for every model file the pack reads, verified before the model is loaded. cosyvoice3.yaml is executed by HyperPyYAML (!new:/!apply: import modules and construct objects), so 'config' files are refused on mismatch. 'weights' files warn instead, so an install that predates the pinned revision keeps working. Regenerate with tools/generate_model_manifest.py and review the diff -- this file is the trust anchor.",
+  "_comment": "sha256 for every model file the pack reads, verified before the model is loaded. One file is deliberately absent: spk2info.pt is not published upstream (the pack creates an empty one), so instead of a hash it is parsed with weights_only=True before the frontend reads it. cosyvoice3.yaml is executed by HyperPyYAML (!new:/!apply: import modules and construct objects), so 'config' files are refused on mismatch. 'weights' files warn instead, so an install that predates the pinned revision keeps working. Regenerate with tools/generate_model_manifest.py and review the diff -- this file is the trust anchor.",
   "manifest_version": 1,
   "models": {
     "Fun-CosyVoice3-0.5B": {

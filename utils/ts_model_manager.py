@@ -17,6 +17,8 @@ try:
     from .ts_logging import get_logger, log_banner, log_exception
     from .ts_model_manifest import (
         pinned_revision,
+        require_safe_torch_load,
+        validate_tensors_only,
         verify_config_files,
         verify_weight_files,
     )
@@ -26,6 +28,8 @@ except (ImportError, ValueError):
     from ts_logging import get_logger, log_banner, log_exception
     from ts_model_manifest import (
         pinned_revision,
+        require_safe_torch_load,
+        validate_tensors_only,
         verify_config_files,
         verify_weight_files,
     )
@@ -327,9 +331,25 @@ def validate_model_root(model_root: str, model_version: str) -> str | None:
             return onnx_error
 
     # Weights and ONNX graphs against the manifest. Several gigabytes, so it belongs
-    # in the once-per-file-set pass rather than on every load. Warns and continues by
-    # design — see utils/ts_model_manifest.py for why weights are not a hard failure.
-    verify_weight_files(model_root, model_version)
+    # in the once-per-file-set pass rather than on every load. It warns rather than
+    # refusing — see utils/ts_model_manifest.py for why — but the result must gate the
+    # record below.
+    mismatched_weights = verify_weight_files(model_root, model_version)
+
+    if mismatched_weights:
+        # Deliberately NOT recording success. Writing the record here meant the
+        # warning appeared exactly once and every later load skipped the check
+        # entirely, reporting "integrity already recorded" for files known not to
+        # match. A load that could not be fully verified must stay unverified, so the
+        # warning is repeated on every load instead of being silently absorbed.
+        LOGGER.warning(
+            "[TS CosyVoice Model Manager] Not recording an integrity pass: %d file(s) "
+            "do not match %s. This will be re-checked and reported on every load until "
+            "the files match the manifest or the manifest is regenerated.",
+            len(mismatched_weights),
+            "model_manifest.json",
+        )
+        return None
 
     _write_validation_record(model_root, model_version, signature)
     return None
@@ -537,6 +557,18 @@ def get_model_path(
 
         try:
             alternate_source = "HuggingFace" if download_source == "ModelScope" else "ModelScope"
+            # Start the alternate source from an empty directory. A failed download
+            # leaves partial files behind, and letting the second source fill in
+            # around them produces a directory assembled from two snapshots — which
+            # would pass the presence and size checks while being a mixture. The hash
+            # verification would now catch it, but the cheaper fix is not to create
+            # the mixture in the first place.
+            LOGGER.info(
+                "[TS CosyVoice Model Manager] Clearing partial download before trying %s, "
+                "so the two sources cannot be mixed into one directory",
+                alternate_source,
+            )
+            clear_model_directory(model_dir)
             return _download_from_source(alternate_source)
 
         except Exception as e2:
@@ -574,6 +606,19 @@ def load_cosyvoice_model(
     # so.
     require_onnxruntime()
     report_provider_status()
+
+    # The vendored loader calls torch.load without weights_only on downloaded
+    # checkpoints, so an older PyTorch would unpickle them. Refuse rather than patch
+    # the vendored tree.
+    require_safe_torch_load()
+
+    # spk2info.pt is the one .pt on the load path the manifest cannot cover: upstream
+    # does not ship it, this pack creates an empty one, and the vendored frontend
+    # torch.loads whatever is present. Prove it is data before that happens.
+    spk2info_root = find_model_root(model_path) or model_path
+    validate_tensors_only(
+        os.path.join(spk2info_root, "spk2info.pt"), "the speaker-info file"
+    )
 
     try:
         # Import from vendored cosyvoice package (bundled with this node pack)

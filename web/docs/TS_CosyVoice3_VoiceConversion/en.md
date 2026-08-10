@@ -30,6 +30,7 @@ Re-voices an existing recording: keeps the timing, phrasing and delivery of the 
 - This is the slowest node in the pack. On CPU a ten-minute file can take hours — run it on a GPU.
 - Cancel stops it between chunks, so a long job aborts within roughly one chunk rather than running to the end.
 - If silence detection is unavailable in your environment, the node logs a warning and falls back to fixed-size chunks. Conversion still works; a split may land mid-word.
+- One clip at a time. These nodes process a single AUDIO clip, so a batch of more than one is refused with an explicit error rather than silently reduced to the first clip. Split the batch upstream, or run the graph once per clip.
 
 ---
 

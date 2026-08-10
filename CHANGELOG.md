@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-10
+
+A second external audit, focused on what happens when things go wrong. Every finding
+was reproduced before being changed; two turned out to be narrower than reported and
+are noted as such.
+
+### Fixed — verification no longer opens on failure
+The trust boundary had three ways to let unverified data through, and the third was
+the worst:
+
+- **A missing or malformed `model_manifest.json` became an empty dict and a warning**,
+  after which loading continued. It is part of the pack, so its absence means a damaged
+  or tampered install — now a refusal, with the reason. Same for a manifest that has no
+  entry for the model being loaded, or an entry with no `config` files: "nothing to
+  check" is no longer reported as "checked".
+- **A verified file that was simply absent was skipped.** An interrupted download, or
+  two mirrors merged into one directory, produced exactly that shape and reached the
+  loader with `cosyvoice3.yaml` unverified. Missing verified files are now refused, and
+  the model directory is cleared before the fallback download source runs so the
+  mixture cannot form in the first place.
+- **A weight-hash mismatch was recorded as a passed deep check.** The warning appeared
+  once and every later load reported "integrity already recorded" for files known not
+  to match — strictly worse than the warn policy it was implementing. A load that could
+  not be fully verified is no longer recorded, so the mismatch is reported every time.
+- **PyTorch older than 2.6 is refused.** The vendored loader calls `torch.load` without
+  `weights_only` on downloaded checkpoints, and before 2.6 that runs the pickle
+  machinery. Enforced as a precondition rather than by patching the vendored tree.
+  Verified that the torch in use here (2.11) does default to `weights_only=True`.
+- **`spk2info.pt` is checked before the vendored frontend reads it.** It is the one
+  `.pt` on the load path the manifest cannot cover — upstream does not publish it and
+  the pack creates an empty one — so it is parsed with `weights_only=True` first. The
+  documentation claiming hashes for "every file this package reads" has been corrected
+  to say so.
+
+### Fixed — publishing is gated on validation
+The publish workflow triggered on a `pyproject.toml` push and called the publish action
+immediately, while the install check ran as a separate workflow with no ordering
+between them. A release that could not be installed could reach the registry before the
+parallel check noticed, and a registry version cannot be withdrawn. The install check is
+now a reusable workflow and `publish-node` has `needs: validate`.
+
+### Fixed — a batch of audio is no longer silently discarded
+`AUDIO` is `[B, C, T]`, and anything with `B > 1` was reduced to `waveform[0]` — logged
+at DEBUG in the shared helper and not logged at all in voice conversion. A five-clip
+batch produced one clip and reported success. It is now refused with an error naming the
+count and what to do instead; `B == 1`, which is every graph that was producing correct
+results, is unaffected. Two local tests that pinned the old behaviour as expected have
+been rewritten to state why the expectation changed, and the limit is documented in the
+README and in each affected node's help page.
+
+### Fixed — one bad preset entry no longer unregisters the whole pack
+`load_emotion_presets` checked that `presets` was a list but then called `.get` on each
+item. `{"presets": [null]}` raised AttributeError, and because the widget options are
+built at *import* time the error propagated out of `__init__.py` — so a single stray
+`null` in a user-edited JSON file meant ComfyUI registered none of the seven nodes.
+Non-object entries are now skipped with one summary warning.
+
+### Fixed — saving a speaker preset is atomic
+`torch.save` wrote straight to the final path, so re-saving an existing name and then
+losing the process — a crash, a full disk, an exception inside `torch.save` — replaced a
+working preset with a truncated one. It now writes to a temporary file in the same
+directory, fsyncs, and `os.replace`s. Fault-injection tests cover the failed overwrite,
+the leftover temporary file, and that the destination is never unlinked first.
+
+### Performance
+- **Voice conversion no longer re-copies the whole result at every seam.** Each chunk
+  was joined onto one growing tensor, and `crossfade_join` allocates a fresh tensor and
+  copies both sides, so total copying grew as O(N²) on exactly the long sources the
+  chunking exists to support. `BoundedSolaJoiner` keeps only the tail that can affect
+  the next splice — `max_overlap + search + fade` samples — and concatenates once,
+  reducing total copying roughly 25-fold at 100 chunks. Measured on the shipped
+  settings (24 s chunks, 1 s overlap): 20 min of audio 362 ms → 136 ms, 40 min 824 ms →
+  313 ms. The output is *bit-identical* to the previous implementation, which is
+  asserted against it for constant, zero and mixed overlaps.
+  The join loop also checks for Cancel now, which it could not before.
+- **Dialog no longer holds ~7× the final audio.** Every turn was kept in a mix list and
+  in the speaking stem, plus an equal-length silence shared by the other three stems,
+  and then a full mix and four full-length stems were built while all of that was still
+  alive — about 2.25 GiB of output waveforms for a one-hour dialog at 24 kHz, before the
+  model. Only `(speaker, waveform)` is kept now, and the five outputs are allocated once
+  and filled by offset.
+
+### Notes on two findings
+- The audit asked for weight-hash mismatches to be **fail-closed**. They remain a loud,
+  now-repeated warning, which was a deliberate choice in 1.2.0: someone whose weights
+  predate the pinned revision has a working install. What made that choice unsafe was
+  the sidecar recording it as verified, which is fixed above; and with PyTorch ≥ 2.6
+  enforced, a tampered checkpoint can no longer execute code. Say the word and it
+  becomes a refusal.
+- ModelScope still resolves to `master`. Its API publishes no immutable ref for this
+  repository (`ModelRevisions: None`), so the hashes are the control there. Unchanged
+  and already documented in the manifest.
+
 ## [1.3.0] - 2026-08-08
 
 Supply-chain and shared-environment release, from an external audit. Nothing about

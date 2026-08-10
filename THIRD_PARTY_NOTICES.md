@@ -98,5 +98,9 @@ the upstream repository and are covered by that repository's own terms:
 - https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512
 - https://modelscope.cn/models/FunAudioLLM/Fun-CosyVoice3-0.5B-2512
 
-The revision fetched and the sha256 of every file this package reads are recorded in
-[`model_manifest.json`](model_manifest.json).
+The revision fetched and the sha256 of every model file this package reads are
+recorded in [`model_manifest.json`](model_manifest.json), with one documented
+exception: `spk2info.pt` is not published upstream, so there is no hash to record. The
+pack creates an empty one when it is absent, and any existing copy is parsed with
+`weights_only=True` before the CosyVoice frontend reads it — so it is checked, just not
+by hash.

@@ -308,8 +308,9 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
             pbar = comfy.utils.ProgressBar(total_steps)
             pbar.update_absolute(1, total_steps)
 
-            speaker_waveforms: Dict[str, List[torch.Tensor]] = {"A": [], "B": [], "C": [], "D": []}
-            combined_waveforms: List[torch.Tensor] = []
+            # One entry per turn: (speaker_id, waveform). Deliberately not four
+            # per-speaker lists plus a mix list — see the allocation comment below.
+            generated_turns: List[Tuple[str, torch.Tensor]] = []
 
             for i, (speaker_id, content) in enumerate(valid_lines):
                 # Cancel between lines: a long script is many separate inferences.
@@ -348,25 +349,43 @@ class TS_CosyVoice3_Dialog(IO.ComfyNode):
                 if current_wav.device != torch.device('cpu'):
                     current_wav = current_wav.cpu()
 
-                combined_waveforms.append(current_wav)
-
-                silence = torch.zeros_like(current_wav)
-                for sid in speaker_waveforms.keys():
-                    if sid == speaker_id:
-                        speaker_waveforms[sid].append(current_wav)
-                    else:
-                        speaker_waveforms[sid].append(silence)
+                generated_turns.append((speaker_id, current_wav))
 
                 pbar.update_absolute(i + 2, total_steps)
 
-            combined_waveform = torch.cat(combined_waveforms, dim=-1)
+            # Only (speaker, waveform) was kept above, and the five outputs are
+            # allocated once here and filled by offset.
+            #
+            # The previous version appended each turn to `combined_waveforms` *and* to
+            # the speaking stem, plus one equal-length silence shared by the other
+            # three stems, then built a full mix and four full-length stems by
+            # concatenation while all of those lists were still alive. That peaked at
+            # roughly 7x the final audio: about 2.25 GiB of output waveforms for a
+            # one-hour dialog at 24 kHz, before the model and the inference buffers.
+            # Writing into preallocated tensors makes the peak the outputs themselves
+            # plus the current turn.
+            total_samples = sum(int(wav.shape[-1]) for _sid, wav in generated_turns)
+            channels = generated_turns[0][1].shape[0] if generated_turns[0][1].ndim > 1 else 1
+            reference_wav = generated_turns[0][1]
+            shape = (channels, total_samples) if reference_wav.ndim > 1 else (total_samples,)
 
-            speaker_tracks: Dict[str, torch.Tensor] = {}
-            for sid, waveforms in speaker_waveforms.items():
-                if waveforms:
-                    speaker_tracks[sid] = torch.cat(waveforms, dim=-1)
-                else:
-                    speaker_tracks[sid] = torch.zeros_like(combined_waveform)
+            combined_waveform = torch.zeros(
+                shape, dtype=reference_wav.dtype, device=reference_wav.device
+            )
+            speaker_tracks: Dict[str, torch.Tensor] = {
+                sid: torch.zeros(shape, dtype=reference_wav.dtype, device=reference_wav.device)
+                for sid in ("A", "B", "C", "D")
+            }
+
+            offset = 0
+            for sid, wav in generated_turns:
+                length = int(wav.shape[-1])
+                combined_waveform[..., offset : offset + length] = wav
+                speaker_tracks[sid][..., offset : offset + length] = wav
+                offset += length
+
+            # The turn tensors are no longer needed; the outputs hold their content.
+            generated_turns.clear()
 
             dialog_audio = tensor_to_comfyui_audio(combined_waveform, sample_rate)
             speaker_a_audio = tensor_to_comfyui_audio(speaker_tracks["A"], sample_rate)

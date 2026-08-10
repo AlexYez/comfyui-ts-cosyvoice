@@ -53,6 +53,17 @@ _REFERENCE_AUDIO_NOTE_EN = (
     "24 kHz before it reaches the model. Clean speech without music or "
     "background noise clones far better than a long noisy sample."
 )
+
+_BATCH_NOTE_EN = (
+    "One clip at a time. These nodes process a single AUDIO clip, so a batch of "
+    "more than one is refused with an explicit error rather than silently reduced "
+    "to the first clip. Split the batch upstream, or run the graph once per clip."
+)
+_BATCH_NOTE_RU = (
+    "Только один клип за раз. Ноды обрабатывают одну AUDIO-дорожку, поэтому batch "
+    "из нескольких клипов отклоняется с понятной ошибкой, а не сокращается молча "
+    "до первого клипа. Разделите batch заранее или запустите граф по клипу."
+)
 _REFERENCE_AUDIO_NOTE_RU = (
     "Референс обрезается до первых 30 секунд и приводится к mono 24 кГц перед "
     "подачей в модель. Чистая речь без музыки и шума клонируется заметно лучше, "
@@ -192,6 +203,7 @@ NODE_DOCS: dict[str, dict] = {
             "restarting ComfyUI. New preset *names* appear in the dropdown after "
             "a node-definition refresh.",
             _SEED_NOTE_EN,
+                    _BATCH_NOTE_EN,
         ],
         "notes_ru": [
             _REFERENCE_AUDIO_NOTE_RU,
@@ -202,6 +214,7 @@ NODE_DOCS: dict[str, dict] = {
             "перезапуска ComfyUI. Новые *названия* пресетов появляются в списке "
             "после обновления определений нод.",
             _SEED_NOTE_RU,
+                    _BATCH_NOTE_RU,
         ],
     },
     "TS_CosyVoice3_SpeakerInstruct2": {
@@ -306,6 +319,7 @@ NODE_DOCS: dict[str, dict] = {
             "infers the language from the text, so target_language mostly "
             "matters for older CosyVoice checkpoints.",
             _SEED_NOTE_EN,
+                    _BATCH_NOTE_EN,
         ],
         "notes_ru": [
             _REFERENCE_AUDIO_NOTE_RU,
@@ -315,6 +329,7 @@ NODE_DOCS: dict[str, dict] = {
             "язык по самому тексту, поэтому target_language важен в основном для "
             "более старых чекпоинтов CosyVoice.",
             _SEED_NOTE_RU,
+                    _BATCH_NOTE_RU,
         ],
     },
     "TS_CosyVoice3_VoiceConversion": {
@@ -397,6 +412,7 @@ NODE_DOCS: dict[str, dict] = {
             "If silence detection is unavailable in your environment, the node "
             "logs a warning and falls back to fixed-size chunks. Conversion still "
             "works; a split may land mid-word.",
+                    _BATCH_NOTE_EN,
         ],
         "notes_ru": [
             "Исходное аудио длиннее 24 секунд режется на чанки с перекрытием. "
@@ -419,6 +435,7 @@ NODE_DOCS: dict[str, dict] = {
             "Если детектор тишины в вашем окружении недоступен, нода пишет "
             "предупреждение и переходит на чанки фиксированного размера. "
             "Конвертация продолжает работать, но рез может попасть в середину слова.",
+                    _BATCH_NOTE_RU,
         ],
     },
     "TS_CosyVoice3_SaveSpeaker": {
@@ -477,6 +494,7 @@ NODE_DOCS: dict[str, dict] = {
             "the node gives no on-canvas sign of it — check the log after saving "
             "a preset without a reference_text, then fill the text in by hand and "
             "save again.",
+                    _BATCH_NOTE_EN,
         ],
         "notes_ru": [
             _REFERENCE_AUDIO_NOTE_RU,
@@ -499,6 +517,7 @@ NODE_DOCS: dict[str, dict] = {
             "нода этого никак не показывает — после сохранения пресета с пустым "
             "reference_text загляните в лог, впишите текст вручную и сохраните "
             "заново.",
+                    _BATCH_NOTE_RU,
         ],
     },
     "TS_CosyVoice3_Dialog": {

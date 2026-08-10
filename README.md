@@ -7,7 +7,7 @@
 **Клонируйте голос. Меняйте эмоции. Локализуйте на 9 языков.**
 **Соберите многоголосый диалог одним нодом — прямо в ComfyUI.**
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue?style=flat-square)](./CHANGELOG.md)
 [![ComfyUI](https://img.shields.io/badge/ComfyUI-V3%20Schema-9333ea?style=flat-square)](./CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Model](https://img.shields.io/badge/model-Fun--CosyVoice3--0.5B-orange?style=flat-square)](https://huggingface.co/FunAudioLLM/Fun-CosyVoice3-0.5B-2512)
@@ -111,6 +111,12 @@ pip install onnxruntime-gpu
 
 > [!NOTE]
 > Модель `Fun-CosyVoice3-0.5B` (~1.5 ГБ) скачается автоматически при первом запуске `Model Loader` в `ComfyUI/models/cosyvoice/`.
+
+> [!IMPORTANT]
+> **Один клип за раз.** Ноды обрабатывают одну AUDIO-дорожку. Batch из нескольких
+> клипов отклоняется с явной ошибкой — раньше он молча сокращался до первого клипа,
+> и остальные исчезали без следа в логе. Разделите batch до нод или запустите граф
+> по клипу.
 
 ---
 
@@ -566,6 +572,12 @@ pip install onnxruntime-gpu
 
 > [!NOTE]
 > The `Fun-CosyVoice3-0.5B` model (~1.5 GB) is downloaded automatically into `ComfyUI/models/cosyvoice/` the first time you run Model Loader.
+
+> [!IMPORTANT]
+> **One clip at a time.** These nodes process a single AUDIO clip. A batch of more
+> than one is refused with an explicit error — it used to be silently reduced to the
+> first clip, with the rest disappearing without a trace at any default log level.
+> Split the batch upstream, or run the graph once per clip.
 
 ---
 

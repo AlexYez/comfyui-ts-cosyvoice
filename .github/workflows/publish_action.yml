@@ -1,4 +1,20 @@
 name: Publish to Comfy registry
+
+# Publishing is gated on validation. Before, this workflow triggered on a
+# pyproject.toml push and called the publish action immediately, while the install
+# check ran as a separate workflow with no ordering between them — so a release that
+# could not be installed could reach the registry seconds before the parallel check
+# noticed, and a registry version cannot be withdrawn.
+#
+# `validate` runs the platform install check (macOS, Linux, Windows, and the declared
+# Python floor) via workflow_call, and `publish-node` needs it. If validation fails,
+# nothing is published.
+#
+# What this does NOT prove: the dev-local pytest suite does not live in this
+# repository, so it cannot run here. The gate is the install-and-import check, which
+# is narrower than the suite and still catches the failure mode that matters for a
+# release — a version nobody can install.
+
 on:
   workflow_dispatch:
   push:
@@ -7,9 +23,20 @@ on:
     paths:
       - "pyproject.toml"
 
+concurrency:
+  # One publish at a time per ref, and never cancelled midway: a half-run publish is
+  # worse than a queued one.
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Validate before publishing
+    uses: ./.github/workflows/platform_install.yml
+
   publish-node:
     name: Publish Custom Node to registry
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Check out code

@@ -24,6 +24,7 @@ Extracts the speaker features from a reference recording and saves them as a reu
 - Leaving reference_text empty pulls in Whisper, which is an optional install: `pip install openai-whisper`. It is not required because it depends on numba, and numba refuses to load against the NumPy that current ComfyUI ships — making it mandatory would break the whole pack. The first time it runs it downloads the Whisper 'base' model (about 140 MB) into `ComfyUI/models/whisper/`.
 - Whisper decodes audio by running the `ffmpeg` command, so it must be on PATH. Windows ComfyUI builds usually bundle it; **macOS does not ship it** — `brew install ffmpeg`. Without ffmpeg the preset is still saved, but with an empty reference text.
 - If Whisper is missing or fails, the preset is still saved but with an empty transcript, and a warning naming the reason is written to the ComfyUI console log. Such a preset clones noticeably worse, and the node gives no on-canvas sign of it — check the log after saving a preset without a reference_text, then fill the text in by hand and save again.
+- One clip at a time. These nodes process a single AUDIO clip, so a batch of more than one is refused with an explicit error rather than silently reduced to the first clip. Split the batch upstream, or run the graph once per clip.
 
 ---
 

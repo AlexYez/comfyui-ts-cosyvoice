@@ -26,6 +26,7 @@ Speaks text in a different language while keeping the timbre of the reference vo
 - Write the text in the target language itself — this node does not translate. Pair it with a translation node if you need that.
 - On CosyVoice3 the language tag is not sent explicitly; the model infers the language from the text, so target_language mostly matters for older CosyVoice checkpoints.
 - Two ways to get a different take. seed = -1 re-runs the node on every execution, so each run is a new take. With a fixed seed the result is reproducible, and ComfyUI returns the cached audio until something changes — set control_after_generate to randomize if you want the seed itself to move between runs.
+- One clip at a time. These nodes process a single AUDIO clip, so a batch of more than one is refused with an explicit error rather than silently reduced to the first clip. Split the batch upstream, or run the graph once per clip.
 
 ---
 

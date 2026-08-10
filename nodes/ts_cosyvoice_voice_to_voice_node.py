@@ -36,16 +36,16 @@ if parent_dir not in sys.path:
 
 try:
     from ..utils.ts_audio_dsp import (
-        crossfade_join,
+        BoundedSolaJoiner,
         find_silence_intervals,
         normalise_rms,
         rms_dbfs,
-        sola_join,
     )
     from ..utils.ts_audio_utils import (
         cleanup_temp_file,
         ensure_mono,
         prepare_audio_for_cosyvoice,
+        reject_audio_batch,
         resample_audio,
         tensor_to_comfyui_audio,
     )
@@ -58,16 +58,16 @@ try:
 except (ImportError, ValueError):
     from nodes._v3_types import CosyVoiceModel
     from utils.ts_audio_dsp import (
-        crossfade_join,
+        BoundedSolaJoiner,
         find_silence_intervals,
         normalise_rms,
         rms_dbfs,
-        sola_join,
     )
     from utils.ts_audio_utils import (
         cleanup_temp_file,
         ensure_mono,
         prepare_audio_for_cosyvoice,
+        reject_audio_batch,
         resample_audio,
         tensor_to_comfyui_audio,
     )
@@ -129,11 +129,18 @@ OUTPUT_PEAK_CEILING_DBFS = -1.0
 PITCH_SHIFT_WORK_SAMPLE_RATE = 24000
 
 
-def _extract_waveform(audio: Dict[str, Any]) -> torch.Tensor:
-    """Return waveform as [channels, samples]."""
+def _extract_waveform(audio: Dict[str, Any], context: str = "") -> torch.Tensor:
+    """
+    Return waveform as [channels, samples].
+
+    A ``[B, C, T]`` batch of more than one clip is refused rather than reduced to
+    ``waveform[0]``, which this used to do with no log line at all. Chunks the node
+    builds itself always have ``B == 1``, so only genuine node inputs can trip it.
+    """
     waveform = audio["waveform"]
 
     if waveform.ndim == 3:
+        reject_audio_batch(waveform, context or "Voice To Voice")
         waveform = waveform[0]
     elif waveform.ndim == 1:
         waveform = waveform.unsqueeze(0)
@@ -549,23 +556,27 @@ def _join_converted_chunks(
     fade_samples = max(1, int(sample_rate * CHUNK_CROSSFADE_SECONDS))
     search_samples = max(1, int(sample_rate * SOLA_SEARCH_SECONDS))
     correlation_samples = max(1, int(sample_rate * SOLA_CORRELATION_SECONDS))
-    combined = prepared[0]
+
+    # Joined through a bounded tail rather than onto one growing tensor. The previous
+    # loop reassigned `combined` on every seam, and each sola_join ends in a
+    # crossfade_join that copies both sides — so the accumulated prefix was re-copied
+    # once per chunk, giving O(N^2) total copying on exactly the long sources this
+    # chunking exists to support. The output is unchanged; see BoundedSolaJoiner.
+    joiner = BoundedSolaJoiner(
+        prepared[0],
+        fade_samples=fade_samples,
+        search_samples=search_samples,
+        correlation_samples=correlation_samples,
+        max_overlap_samples=max([0, *expected_overlaps]),
+    )
 
     for index, next_waveform in enumerate(prepared[1:], start=1):
-        expected_overlap = expected_overlaps[index]
-        if expected_overlap > 0:
-            combined = sola_join(
-                combined,
-                next_waveform,
-                expected_overlap_samples=expected_overlap,
-                fade_samples=fade_samples,
-                search_samples=search_samples,
-                correlation_samples=correlation_samples,
-            )
-        else:
-            combined = crossfade_join(combined, next_waveform, fade_samples)
+        # A long source is many seams; without this, Cancel could not interrupt the
+        # join even though it can interrupt the inference that produced the chunks.
+        raise_if_interrupted()
+        joiner.append(next_waveform, expected_overlaps[index])
 
-    return combined
+    return joiner.result()
 
 
 class TS_CosyVoice3_VoiceConversion(IO.ComfyNode):

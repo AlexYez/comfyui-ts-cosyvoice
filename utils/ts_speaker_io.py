@@ -167,13 +167,38 @@ def save_speaker_preset(speaker_name: str, model_input: Dict[str, Any]) -> str:
     Returns:
         Absolute path of the written `.pt` file.
     """
+    import tempfile
+
     import torch
 
     save_dir = get_speaker_save_dir()
     save_path = resolve_preset_path(speaker_name, save_dir)
     name = sanitize_speaker_name(speaker_name)
 
-    torch.save({name: model_input}, save_path)
+    # Written to a temporary file in the same directory, flushed to disk, then moved
+    # into place with os.replace, which is atomic on POSIX and on Windows. Saving
+    # straight over save_path meant that re-saving an existing name and then losing
+    # the process -- a crash, a full disk, a raise inside torch.save -- replaced a
+    # working preset with a truncated or empty one. A preset is a small file the user
+    # may have spent effort curating; the previous version has to survive a failure.
+    handle, temporary_path = tempfile.mkstemp(
+        prefix=f".{name}.", suffix=".pt.partial", dir=save_dir
+    )
+    os.close(handle)
+    try:
+        with open(temporary_path, "wb") as stream:
+            torch.save({name: model_input}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, save_path)
+    except BaseException:
+        # Includes cancellation: a half-written temp file must not be left behind.
+        try:
+            os.unlink(temporary_path)
+        except OSError:
+            pass
+        raise
+
     LOGGER.info("[TS CosyVoice3 Speaker IO] Saved preset '%s' to %s", name, os.path.basename(save_path))
     return save_path
 

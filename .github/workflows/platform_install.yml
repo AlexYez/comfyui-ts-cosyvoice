@@ -26,9 +26,14 @@ on:
       - "utils/**"
       - "nodes/**"
   workflow_dispatch:
+  # Callable, so the publish workflow can gate a release on exactly these checks
+  # rather than running them in parallel and hoping. See publish_action.yml.
+  workflow_call:
 
 concurrency:
-  group: platform-install-${{ github.ref }}
+  # Keyed by workflow as well as ref: when publish_action.yml calls this, the called
+  # run must not cancel the standalone run for the same commit (or itself).
+  group: platform-install-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
