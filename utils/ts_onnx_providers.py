@@ -62,21 +62,63 @@ def available_providers() -> list[str]:
         return []
 
 
+# What the vendored frontend actually calls. Importing the module is not enough to
+# know these exist: see require_onnxruntime.
+_REQUIRED_ATTRIBUTES = ("SessionOptions", "InferenceSession", "get_available_providers")
+
+
 def require_onnxruntime() -> list[str]:
     """
-    Return the available providers, raising a pack-level error if ORT is absent.
+    Return the available providers, raising a pack-level error if ORT is unusable.
 
     Called before the vendored code reaches its own module-level ``import
     onnxruntime``, so the user sees which package to install rather than an
     ImportError from inside a vendored file.
+
+    A successful import is **not** sufficient, which an earlier version of this
+    assumed. ``onnxruntime`` and ``onnxruntime-gpu`` install into the *same*
+    ``onnxruntime/`` directory, so uninstalling one removes files the other needs --
+    including ``__init__.py``. What is left is a directory Python imports happily as a
+    namespace package: ``import onnxruntime`` succeeds, ``__file__`` is None, and the
+    first real call fails with ``module 'onnxruntime' has no attribute
+    'SessionOptions'`` from inside vendored code. Observed in the wild after
+    `pip uninstall onnxruntime` was run while ComfyUI still held the DLLs open, which
+    also leaves ``~ackend``-style stubs behind where pip could not delete a locked
+    file. So the attributes are checked, not just the import.
     """
     try:
-        import onnxruntime  # noqa: F401
+        import onnxruntime
     except ImportError as exc:
         raise RuntimeError(
             f"{LOG_PREFIX} ONNX Runtime is not installed, and the CosyVoice speech "
             f"tokenizer cannot run without it.\n{INSTALL_HINT}"
         ) from exc
+
+    missing = [name for name in _REQUIRED_ATTRIBUTES if not hasattr(onnxruntime, name)]
+    if missing:
+        location = getattr(onnxruntime, "__file__", None)
+        where = list(getattr(onnxruntime, "__path__", []) or [])
+        raise RuntimeError(
+            f"{LOG_PREFIX} ONNX Runtime imports but is not usable: it is missing "
+            f"{', '.join(missing)}.\n"
+            f"  Module file: {location!r}"
+            + (f"\n  Directory:   {where[0]}" if where else "")
+            + (
+                "\n  A module file of None means Python found the directory but no "
+                "__init__.py, i.e. a half-removed install rather than a working one."
+                if location is None
+                else ""
+            )
+            + "\n  This is what installing both variants, or uninstalling one of them, "
+            "leaves behind: they share the same onnxruntime/ directory, so removing "
+            "either deletes files the other needs.\n"
+            "  Fix it with ComfyUI fully stopped, or the files stay locked and the "
+            "reinstall is partial again:\n"
+            "    pip uninstall -y onnxruntime onnxruntime-gpu\n"
+            "    (delete any leftover site-packages/onnxruntime/ directory)\n"
+            "    pip install onnxruntime-gpu      # or onnxruntime, for CPU only"
+        )
+
     return available_providers()
 
 

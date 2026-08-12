@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-08-10
+
+### Fixed
+- **A half-removed ONNX Runtime was let through as if it were fine.**
+  `require_onnxruntime()` exists so a missing or broken ONNX Runtime produces a
+  pack-level error naming the package to install, instead of a failure from inside
+  vendored code. It only checked that `import onnxruntime` succeeded — which is not
+  enough, and the gap was hit in practice.
+
+  `onnxruntime` and `onnxruntime-gpu` are separate distributions that install into the
+  *same* `site-packages/onnxruntime/` directory, so uninstalling either deletes files
+  the other needs, `__init__.py` included. pip leaves the directory behind, Python
+  imports it as a namespace package, and the import succeeds with `__file__` set to
+  `None`. The first real call then raised
+
+      module 'onnxruntime' has no attribute 'SessionOptions'
+
+  from `cosyvoice/cli/frontend.py` — exactly the obscure failure the check was added
+  to prevent. Made worse when the uninstall runs while ComfyUI still holds the DLLs
+  open: pip cannot delete a locked file, renames it to `~ackend` and reports success.
+
+  The check now verifies that `SessionOptions`, `InferenceSession` and
+  `get_available_providers` are actually present, and the error names what is missing,
+  reports the module path (calling out `None` as a half-removed install), explains why
+  a successful import proves nothing, and gives the repair — including that ComfyUI
+  must be fully stopped first, or the reinstall is partial again.
+
+Behaviour of the nodes is unchanged; this is diagnostics only.
+
 ## [1.4.0] - 2026-08-10
 
 A second external audit, focused on what happens when things go wrong. Every finding
